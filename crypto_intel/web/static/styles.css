@@ -130,15 +130,15 @@ body {
 }
 .ask-btn .qmark {
   fill: var(--accent);
-  font-family: var(--serif); font-style: italic; font-size: 26px;
+  font-family: var(--serif); font-style: italic; font-size: 34px;
 }
-.ask-btn:not(:disabled) svg { animation: bob 2.6s ease-in-out infinite; }
-.ask-btn:not(:disabled):hover svg { animation: bob 1s ease-in-out infinite; }
+.ask-btn:not(:disabled) svg { animation: bob 1.2s ease-in-out infinite; }
+.ask-btn:not(:disabled):hover svg { animation: bob 0.5s ease-in-out infinite; }
 .ask-btn:not(:disabled):hover .ring { stroke-width: 3.5; }
 .ask-btn.loading svg { animation: none; }
 .ask-btn.loading .ring { stroke-dasharray: 80 46; animation: spin 0.9s linear infinite; }
 .ask-btn.loading .qmark { opacity: 0.35; }
-@keyframes bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-3px); } }
+@keyframes bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
 @keyframes spin { to { transform: rotate(360deg); } }
 
 /* ---- Reports (price + intel) --------------------------------------------- */

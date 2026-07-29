@@ -1,0 +1,31 @@
+# Secrets
+.env
+
+# Local data store (Chroma db, documents.jsonl, price cache)
+data/store/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# claude
+.claude/
+CLAUDE.md
+
+# web gui
+crypto_intel/web/

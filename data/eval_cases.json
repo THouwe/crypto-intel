@@ -1,0 +1,28 @@
+[
+  {
+    "question": "Why did ETH drop 6% today?",
+    "expected_asset": "ETH",
+    "expected_window_hours": 24,
+    "expected_source_contains": "beincrypto"
+  },
+  {
+    "question": "What's driving BTC this week?",
+    "expected_asset": "BTC",
+    "expected_window_hours": 168
+  },
+  {
+    "question": "Why is SOL up today?",
+    "expected_asset": "SOL",
+    "expected_window_hours": 24
+  },
+  {
+    "question": "Why did Ethereum move over the last 48 hours?",
+    "expected_asset": "ETH",
+    "expected_window_hours": 48
+  },
+  {
+    "question": "What happened to XRP yesterday?",
+    "expected_asset": "XRP",
+    "expected_window_hours": 48
+  }
+]

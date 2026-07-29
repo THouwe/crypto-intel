@@ -1,0 +1,60 @@
+[project]
+name = "crypto-intel"
+version = "0.1.0"
+description = "Crypto Market Intelligence Assistant — a citation-grounded RAG CLI that explains crypto price moves."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "Thomas Houweling" }]
+
+dependencies = [
+    "typer>=0.12",
+    "pydantic>=2.7",
+    "pydantic-settings>=2.0",
+    "httpx>=0.27",
+    "praw>=7.7",
+    "feedparser>=6.0",
+    "chromadb>=0.5",          # also provides the default ONNX MiniLM embedder
+    "rank-bm25>=0.2",
+    "anthropic>=0.40",
+    "PyYAML>=6.0",
+]
+
+[project.optional-dependencies]
+# Alternative embedding backend (EMBED_BACKEND=sentence-transformers). Pulls
+# torch — heavy, and hard to install on some platforms (e.g. Python 3.14 /
+# Windows long paths). The default "onnx" backend needs none of this.
+st = [
+    "sentence-transformers>=3.0",
+]
+# Optional web GUI over `price-event` (crypto-intel serve). Kept out of core so
+# the demo stays CLI-only per the spec.
+web = [
+    "fastapi>=0.110",
+    "uvicorn>=0.29",
+]
+# Optional Postgres/pgvector store backend (STORE_BACKEND=pgvector). For the
+# web/Supabase deployment; the default embedded Chroma backend needs none of this.
+pg = [
+    "psycopg[binary]>=3.1",
+    "pgvector>=0.2.5",
+]
+dev = [
+    "pytest>=8.0",
+]
+
+[project.scripts]
+# Entry point is main() (not the Typer `app`) so the UTF-8 stdout/stderr setup
+# runs for the installed console script too — needed for piping on Windows.
+crypto-intel = "crypto_intel.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["crypto_intel"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

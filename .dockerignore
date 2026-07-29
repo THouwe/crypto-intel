@@ -1,0 +1,23 @@
+# Keep the build context small and avoid baking local/dev state into the image.
+.venv/
+venv/
+data/            # local Chroma store, JSONL, price cache (irrelevant for pgvector deploy)
+img/
+tests/
+.git/
+.gitignore
+.github/
+.claude/
+.env
+.env.*
+!.env.example
+**/__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.DS_Store
+Thumbs.db
+*.md
+!README.md

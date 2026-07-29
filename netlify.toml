@@ -1,0 +1,29 @@
+# Netlify config for the static frontend only. The FastAPI backend lives on
+# Railway (see Procfile); this proxies same-origin /api/* calls to it so the
+# frontend's relative fetch() paths (app.js: /api/assets, /api/price-event,
+# /api/evidence) work unchanged and no CORS is needed.
+#
+# Set BACKEND_URL below to your Railway service URL (no trailing slash), e.g.
+# https://crypto-intel-production.up.railway.app
+
+[build]
+  # Static site — nothing to compile. Publish the split assets directly.
+  publish = "crypto_intel/web/static"
+  command = ""
+
+# Proxy the API to the Railway backend. status=200 makes it a transparent
+# rewrite (not a 301/302), so the browser keeps hitting the Netlify origin and
+# never sees a cross-origin request. force=true wins over any static file that
+# might otherwise match.
+[[redirects]]
+  from = "/api/*"
+  to = "https://YOUR-RAILWAY-APP.up.railway.app/api/:splat"
+  status = 200
+  force = true
+
+# SPA fallback: serve index.html for any non-file, non-API route so deep links
+# and refreshes don't 404. Listed AFTER the /api rule so it never shadows it.
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

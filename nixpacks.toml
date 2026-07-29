@@ -1,0 +1,5 @@
+# Railway uses Nixpacks by default. The web server (FastAPI + uvicorn) and the
+# pgvector store backend live in optional extras, so the default `pip install .`
+# would skip them. Install both extras explicitly.
+[phases.install]
+cmds = ["pip install -e '.[web,pg]'"]

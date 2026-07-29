@@ -1,0 +1,47 @@
+# Public sources. Dead RSS feeds are skipped with a warning, never fatal.
+# Treat this as a starting point.
+
+# CoinMarketCap content feed (news/headlines + Alexandria articles) via the CMC
+# Pro API. Default community/news content source (replaces Reddit). Requires
+# CMC_API_KEY. NOTE: /v1/content/latest is a PAID-plan endpoint — with a free
+# "Basic" key the connector fails soft with a logged notice.
+coinmarketcap:
+  news_type: all      # all | news | community | alexandria
+  limit: 100
+
+# Reddit is OPT-IN only (`--sources reddit`) — it needs OAuth "script"
+# credentials. Not part of the default/`--all` set. `source_name` -> "r/<name>".
+reddit:
+  subreddits:
+    - ethereum
+    - bitcoin
+    - CryptoCurrency
+    - solana
+
+# RSS feeds, grouped by source type. Each entry: name + url.
+# This list was validated live (all fetch + parse with dated entries) on
+# 2026-07-26. Dead/unreachable feeds are still skipped at runtime (fail soft).
+rss:
+  news:
+    - { name: CoinDesk,         url: "https://www.coindesk.com/arc/outboundfeeds/rss/" }
+    - { name: Cointelegraph,    url: "https://cointelegraph.com/rss" }
+    - { name: Decrypt,          url: "https://decrypt.co/feed" }
+    - { name: The Defiant,      url: "https://thedefiant.io/feed" }
+    - { name: Blockworks,       url: "https://blockworks.co/feed" }
+    - { name: CryptoSlate,      url: "https://cryptoslate.com/feed/" }
+    - { name: Bitcoin Magazine, url: "https://bitcoinmagazine.com/feed" }
+    - { name: BeInCrypto,       url: "https://beincrypto.com/feed/" }
+    - { name: AMBCrypto,        url: "https://ambcrypto.com/feed/" }
+    - { name: U.Today,          url: "https://u.today/rss" }
+    - { name: NewsBTC,          url: "https://www.newsbtc.com/feed/" }
+    - { name: CryptoPotato,     url: "https://cryptopotato.com/feed/" }
+    - { name: CoinGape,         url: "https://coingape.com/feed/" }
+    - { name: CoinJournal,      url: "https://coinjournal.net/feed/" }
+    - { name: Bitcoinist,       url: "https://bitcoinist.com/feed/" }
+
+  exchange:
+    - { name: Kraken, url: "https://blog.kraken.com/feed" }
+
+  regulator:
+    - { name: SEC,  url: "https://www.sec.gov/news/pressreleases.rss" }
+    - { name: CFTC, url: "https://www.cftc.gov/RSS/RSSGP/rssgp.xml" }

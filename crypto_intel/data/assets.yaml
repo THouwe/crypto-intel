@@ -1,0 +1,13 @@
+# Ticker -> CoinGecko id + tagging aliases.
+# `coingecko_id` drives price lookups; `aliases` are lowercased substrings used
+# for asset tagging during normalization.
+ETH:  {coingecko_id: ethereum,     aliases: [eth, ether, ethereum]}
+BTC:  {coingecko_id: bitcoin,      aliases: [btc, bitcoin, xbt]}
+SOL:  {coingecko_id: solana,       aliases: [sol, solana]}
+XRP:  {coingecko_id: ripple,       aliases: [xrp, ripple]}
+BNB:  {coingecko_id: binancecoin,  aliases: [bnb, binance coin]}
+ADA:  {coingecko_id: cardano,      aliases: [ada, cardano]}
+DOGE: {coingecko_id: dogecoin,     aliases: [doge, dogecoin]}
+AVAX: {coingecko_id: avalanche-2,  aliases: [avax, avalanche]}
+LINK: {coingecko_id: chainlink,    aliases: [link, chainlink]}
+MATIC: {coingecko_id: matic-network, aliases: [matic, polygon]}

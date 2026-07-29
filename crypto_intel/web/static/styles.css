@@ -1,0 +1,238 @@
+/* WhatHappenedCrypto — editorial / broadsheet styling, set in Charter. */
+
+:root {
+  --paper: #f5f1e8;         /* aged newsprint */
+  --paper-edge: #ece5d6;
+  --ink: #1c1a17;
+  --ink-soft: #5c574c;
+  --rule: #cfc6b2;
+  --accent: #3d6a94;        /* the logo's steel blue */
+  --accent-soft: #4a7ba6;
+  --up: #2f7d4f;
+  --down: #a83232;
+  --flat: #6b6558;
+  --serif: "Charter", "Bitstream Charter", "Sitka Text", Cambria, "Georgia", serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper: #16150f;
+    --paper-edge: #1e1c14;
+    --ink: #e9e3d3;
+    --ink-soft: #a49d89;
+    --rule: #3a362a;
+    --accent: #7ea6ca;
+    --accent-soft: #93b6d4;
+    --up: #6cc08a;
+    --down: #e08a8a;
+    --flat: #a49d89;
+  }
+}
+
+* { box-sizing: border-box; }
+
+html { background: var(--paper-edge); }
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--serif);
+  font-size: 18px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+.paper {
+  max-width: 680px;
+  margin: 0 auto;
+  padding: 40px 28px 64px;
+}
+
+/* ---- Masthead ------------------------------------------------------------ */
+.masthead { text-align: center; }
+.masthead__rule { border-top: 1px solid var(--rule); }
+.masthead__rule--double {
+  border-top: 3px double var(--rule);
+  margin-top: 33px;
+}
+.masthead__logo {
+  display: block;
+  width: 200px;
+  max-width: 80%;
+  height: auto;
+  margin: -18px auto -22px;   /* pull in the logo's generous transparent margins */
+}
+@media (prefers-color-scheme: dark) {
+  /* the logo art is dark steel-blue on transparency; lift it on dark paper */
+  .masthead__logo { filter: brightness(0) invert(0.72) sepia(0.15); opacity: 0.92; }
+}
+
+.dateline {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: 10px 0 0;
+  padding: 6px 2px 0;
+  font-size: 0.66rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+/* ---- Lede / question ----------------------------------------------------- */
+.lede { margin: 40px 0 8px; text-align: center; }
+
+.prompt {
+  margin: 0;
+  font-size: 2rem;
+  line-height: 1.4;
+  font-weight: 400;
+}
+.prompt select {
+  font-family: var(--serif);
+  font-size: 1em;
+  font-style: italic;
+  color: var(--accent);
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--accent);
+  padding: 0 20px 1px 2px;
+  cursor: pointer;
+  appearance: none;
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--accent) 50%),
+    linear-gradient(135deg, var(--accent) 50%, transparent 50%);
+  background-position: right 6px top 62%, right 2px top 62%;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+}
+.prompt select:focus { outline: none; border-bottom-width: 2px; }
+
+.standfirst {
+  margin: 16px 0 0;
+  font-style: italic;
+  color: var(--ink-soft);
+  font-size: 1.02rem;
+}
+
+/* Animated "?" nib */
+.ask-btn {
+  background: transparent; border: 0; padding: 0; cursor: pointer;
+  line-height: 0; vertical-align: -10px; margin-left: 4px;
+}
+.ask-btn svg { display: inline-block; overflow: visible; }
+.ask-btn .ring {
+  fill: none; stroke: var(--accent); stroke-width: 2.5;
+  transform-origin: 24px 24px;
+}
+.ask-btn .qmark {
+  fill: var(--accent);
+  font-family: var(--serif); font-style: italic; font-size: 26px;
+}
+.ask-btn:not(:disabled) svg { animation: bob 2.6s ease-in-out infinite; }
+.ask-btn:not(:disabled):hover svg { animation: bob 1s ease-in-out infinite; }
+.ask-btn:not(:disabled):hover .ring { stroke-width: 3.5; }
+.ask-btn.loading svg { animation: none; }
+.ask-btn.loading .ring { stroke-dasharray: 80 46; animation: spin 0.9s linear infinite; }
+.ask-btn.loading .qmark { opacity: 0.35; }
+@keyframes bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-3px); } }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ---- Reports (price + intel) --------------------------------------------- */
+.report { margin-top: 40px; }
+.report[hidden] { display: none; }
+
+.kicker {
+  font-size: 0.68rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  border-bottom: 1px solid var(--rule);
+  padding-bottom: 6px;
+  margin: 0 0 16px;
+}
+.placeholder { font-style: italic; color: var(--ink-soft); }
+.error { color: var(--down); font-style: italic; }
+
+/* Price move — a market panel */
+.move__head {
+  display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+.move__ticker { font-size: 2.2rem; font-weight: 700; letter-spacing: 0.01em; }
+.move__pct { font-size: 2.2rem; font-weight: 700; }
+.report.up .move__pct { color: var(--up); }
+.report.down .move__pct { color: var(--down); }
+.move__dir {
+  font-size: 0.7rem; letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--ink-soft);
+}
+.ledger { margin: 0; border-top: 1px solid var(--rule); }
+.ledger > div {
+  display: grid; grid-template-columns: 150px 1fr; gap: 10px;
+  padding: 9px 0; border-bottom: 1px solid var(--rule);
+}
+.ledger dt {
+  font-size: 0.68rem; letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--ink-soft); align-self: center;
+}
+.ledger dd { margin: 0; font-variant-numeric: tabular-nums; }
+
+/* Intel — a column of dispatches */
+.dispatch { padding: 20px 0; border-bottom: 1px solid var(--rule); }
+.dispatch:first-of-type { padding-top: 4px; }
+.dispatch:last-of-type { border-bottom: 0; }
+.dispatch__meta {
+  display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+.dispatch__source {
+  font-weight: 700; font-size: 0.74rem; letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.dispatch__date { font-size: 0.82rem; font-style: italic; color: var(--ink-soft); }
+.dispatch__score {
+  margin-left: auto;
+  font-size: 0.68rem; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: 2px; padding: 1px 6px;
+  font-variant-numeric: tabular-nums;
+}
+.dispatch__body { margin: 0 0 8px; }
+.dispatch__body::first-letter {
+  /* editorial drop-cap-ish lift on each dispatch's lede */
+  font-weight: 700;
+}
+.dispatch__link {
+  font-size: 0.82rem; font-style: italic; color: var(--accent);
+  word-break: break-word;
+}
+
+/* ---- Colophon ------------------------------------------------------------ */
+.colophon {
+  margin-top: 48px;
+  padding-top: 16px;
+  border-top: 3px double var(--rule);
+  font-size: 0.86rem;
+  color: var(--ink-soft);
+  text-align: center;
+}
+.colophon a { color: var(--accent); }
+code {
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 0.85em;
+  background: var(--paper-edge);
+  padding: 1px 5px;
+  border-radius: 2px;
+}
+a { color: var(--accent); }
+
+@media (max-width: 480px) {
+  .prompt { font-size: 1.55rem; }
+  .move__ticker, .move__pct { font-size: 1.7rem; }
+  .ledger > div { grid-template-columns: 120px 1fr; }
+}

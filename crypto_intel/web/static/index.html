@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>WhatHappenedCrypto — Market Intelligence</title>
+  <link rel="icon" href="/static/assets/WhatHappenedCrypto-.png" />
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <main class="paper">
+
+    <!-- Masthead -->
+    <header class="masthead">
+      <!-- <div class="masthead__rule"></div> -->
+      <!-- <img class="masthead__logo" src="/static/assets/WhatHappenedCrypto_transparent-small.png" -->
+      <img class="masthead__logo" src="/static/assets/logo.png"
+           alt="WhatHappenedCrypto" />
+      <div class="masthead__rule masthead__rule--double"></div>
+      <p class="dateline">
+        <span>Market Intelligence</span>
+        <span id="dateline-date">—</span>
+        <span>Not Investment Advice</span>
+      </p>
+    </header>
+
+    <!-- Lede: the question -->
+    <section class="lede">
+      <p class="prompt">
+        What happened to
+        <select id="asset" aria-label="Asset"></select>
+        within the last
+        <select id="hours" aria-label="Window">
+          <option value="1">1 hour</option>
+          <option value="3">3 hours</option>
+          <option value="24" selected>1 day</option>
+          <option value="72">3 days</option>
+          <option value="168">1 week</option>
+        </select>
+        <button id="go" class="ask-btn" type="button" aria-label="Ask">
+          <svg viewBox="0 0 48 48" width="44" height="44">
+            <circle class="ring" cx="24" cy="24" r="20" />
+            <text class="qmark" x="24" y="32" text-anchor="middle">?</text>
+          </svg>
+        </button>
+      </p>
+      <p class="standfirst">Confirm the price move, then read the record behind it.</p>
+    </section>
+
+    <!-- Report -->
+    <article id="price" class="report" hidden></article>
+    <article id="evidence" class="report" hidden></article>
+
+    <footer class="colophon">
+      <p>Evidence is retrieved, not synthesized. For the full, citation-grounded, LLM-generated
+        account (the <code>ask</code> command) use the CLI available at
+        <a href="https://github.com/THouwe/crypto-market-intelligence-assistant">github://THouwe/crypto-market-intelligence-assistant</a>.</p>
+    </footer>
+  </main>
+
+  <script src="/static/app.js" defer></script>
+</body>
+</html>

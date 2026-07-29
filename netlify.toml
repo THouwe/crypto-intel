@@ -3,8 +3,11 @@
 # frontend's relative fetch() paths (app.js: /api/assets, /api/price-event,
 # /api/evidence) work unchanged and no CORS is needed.
 #
-# Set BACKEND_URL below to your Railway service URL (no trailing slash), e.g.
-# https://crypto-intel-production.up.railway.app
+# Set the /api/* target below to your Railway service URL (no trailing slash),
+# e.g. https://crypto-intel-production.up.railway.app
+#
+# Redirects are evaluated top-to-bottom, first match wins — so the specific
+# /api/* and /static/* rules must come before the catch-all /* fallback.
 
 [build]
   # Static site — nothing to compile. Publish the split assets directly.
@@ -17,12 +20,22 @@
 # might otherwise match.
 [[redirects]]
   from = "/api/*"
-  to = "https://YOUR-RAILWAY-APP.up.railway.app/api/:splat"
+  to = "https://crypto-intel-production-b3fe.up.railway.app/api/:splat"
   status = 200
   force = true
 
-# SPA fallback: serve index.html for any non-file, non-API route so deep links
-# and refreshes don't 404. Listed AFTER the /api rule so it never shadows it.
+# index.html references its assets under /static/* because FastAPI serves them
+# from that mount point (app.mount("/static", ...)). Here the publish root IS the
+# static folder, so those files actually live at the site root (/styles.css,
+# /app.js, /assets/…). Strip the /static prefix so the hardcoded /static/* links
+# resolve instead of 404-ing (which would leave the page unstyled with no JS).
+[[redirects]]
+  from = "/static/*"
+  to = "/:splat"
+  status = 200
+
+# SPA fallback: serve index.html for any remaining route so deep links and
+# refreshes don't 404. Listed LAST so it never shadows /api or /static.
 [[redirects]]
   from = "/*"
   to = "/index.html"

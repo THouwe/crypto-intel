@@ -129,21 +129,25 @@ and no code change**:
 
 [[redirects]]
   from = "/api/*"
-  to = "https://YOUR-RAILWAY-APP.up.railway.app/api/:splat"
+  to = "https://crypto-intel-production-b3fe.up.railway.app/api/:splat"
   status = 200        # transparent rewrite — browser stays same-origin
   force = true
 
 [[redirects]]
+  from = "/static/*"  # index.html links assets under /static (FastAPI's mount);
+  to = "/:splat"      # here they live at the publish root, so strip the prefix
+  status = 200
+
+[[redirects]]
   from = "/*"
-  to = "/index.html"  # SPA fallback (after the /api rule, so it never shadows it)
+  to = "/index.html"  # SPA fallback (last, so it never shadows /api or /static)
   status = 200
 ```
 
-**Edit before deploying:** replace `YOUR-RAILWAY-APP.up.railway.app` with your
-Railway API hostname (no trailing slash; keep `/api/:splat`). Netlify does not
-interpolate env vars into `netlify.toml` redirects, so the backend URL is
-hardcoded here. If the Netlify UI has a build command set, clear it — this file's
-empty `command` means "just publish".
+**The API hostname is hardcoded** (`crypto-intel-production-b3fe.up.railway.app`) —
+Netlify does not interpolate env vars into `netlify.toml` redirects, so if the
+Railway domain ever changes, update it here. If the Netlify UI has a build command
+set, clear it — this file's empty `command` means "just publish".
 
 **Alternative to the proxy:** inject an `API_BASE` into `app.js` and enable CORS on
 the FastAPI side. The proxy is preferred — one origin, no CORS.

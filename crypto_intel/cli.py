@@ -211,6 +211,9 @@ def ask(
     no_synth: bool = typer.Option(
         False, "--no-synth", help="Show retrieved evidence only; skip synthesis."
     ),
+    no_regime: bool = typer.Option(
+        False, "--no-regime", help="Skip the S12 volatility-regime context/banner."
+    ),
     model: str = typer.Option(None, "--model", help="Override the synthesis model."),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Verbose logging."),
 ) -> None:
@@ -218,7 +221,7 @@ def ask(
     _configure_logging(verbose)
     settings = get_settings()
 
-    from .pipeline import retrieve_context
+    from .pipeline import retrieve_context, _maybe_forecast, _forecast_context
 
     ctx = retrieve_context(
         question,
@@ -241,6 +244,20 @@ def ask(
             f"Event    : {arrow} {e.pct_change:+.2f}% ({e.direction}), "
             f"drawdown -{e.max_drawdown_pct:.2f}%, move "
             f"{_fmt_ts(e.move_start)} -> {_fmt_ts(e.move_end)}"
+        )
+
+    # S12: weave the current volatility regime in as market-state context.
+    forecast = None if no_regime else _maybe_forecast(ctx.event, settings)
+    if forecast is not None:
+        glyph = {"calm": "○", "normal": "◐", "turbulent": "●"}[forecast.regime]
+        skill = (
+            f", skill {forecast.skill_vs_baseline:+.2f}"
+            if forecast.skill_vs_baseline is not None else ""
+        )
+        typer.echo(
+            f"Regime   : {glyph} {forecast.regime.upper()} "
+            f"({forecast.predicted_vol_annualized:.0%} ann. vol, "
+            f"model {forecast.model_name}{skill})"
         )
     typer.echo("")
 
@@ -269,7 +286,8 @@ def ask(
 
     try:
         answer = synthesize(
-            ctx.parsed.question, ctx.event, ctx.chunks, settings=settings, model=model
+            ctx.parsed.question, ctx.event, ctx.chunks, settings=settings, model=model,
+            forecast_context=_forecast_context(forecast) if forecast else None,
         )
     except SynthesisError as exc:
         typer.echo(f"\nSynthesis failed: {exc}")

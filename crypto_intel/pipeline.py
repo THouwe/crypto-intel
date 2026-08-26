@@ -347,6 +347,35 @@ def ask_db(
     )
 
 
+def _maybe_forecast(event, settings, client=None):
+    """Best-effort volatility forecast for the event's asset (S12).
+
+    Returns a ``VolForecast`` when a model is trained and the forecast extras +
+    data are available; ``None`` otherwise. Never raises — the regime is a bonus
+    on top of the cited answer, and must never break ``ask``.
+    """
+    if event is None:
+        return None
+    try:
+        from .forecast.predict import predict as run_predict
+
+        return run_predict(event.asset, settings=settings, client=client)
+    except Exception as exc:  # no model / deps / data → silently skip
+        logger.debug("Regime forecast unavailable for %s: %s", event.asset, exc)
+        return None
+
+
+def _forecast_context(fc) -> str:
+    """A one-line market-state string for the synthesis prompt (background only)."""
+    skill = f", skill {fc.skill_vs_baseline:+.2f} vs baseline" if fc.skill_vs_baseline is not None else ""
+    return (
+        f"Current volatility regime for {fc.asset}: {fc.regime.upper()} "
+        f"(next-{fc.horizon_hours}h realized-vol forecast {fc.predicted_vol_annualized:.0%} "
+        f"annualized, model {fc.model_name}{skill}). Background on how turbulent "
+        f"conditions are — a volatility estimate, not a price prediction."
+    )
+
+
 def ask(
     question: str,
     *,
@@ -357,9 +386,15 @@ def ask(
     sources: set[str] | None = None,
     use_bm25: bool = True,
     model: str | None = None,
+    with_regime: bool = True,
 ) -> Answer:
     """Full ``ask`` flow: retrieve time-windowed evidence, then synthesize a
-    grounded, cited :class:`Answer`. Notes from retrieval are merged in."""
+    grounded, cited :class:`Answer`. Notes from retrieval are merged in.
+
+    When ``with_regime`` and a forecast model is trained for the asset, the current
+    volatility regime (S12) is woven into the prompt as market-state context and
+    attached to ``Answer.market_state`` — background only, never a price/trade call.
+    """
     settings = settings or get_settings()
     ctx = retrieve_context(
         question,
@@ -372,8 +407,21 @@ def ask(
     )
     from .synthesize import synthesize  # deferred (optional anthropic dep)
 
-    answer = synthesize(question, ctx.event, ctx.chunks, settings=settings, model=model)
+    forecast = _maybe_forecast(ctx.event, settings) if with_regime else None
+    fc_context = _forecast_context(forecast) if forecast else None
+
+    answer = synthesize(
+        question, ctx.event, ctx.chunks, settings=settings, model=model,
+        forecast_context=fc_context,
+    )
     answer.notes = ctx.notes + answer.notes
+    if forecast is not None:
+        answer.market_state = {
+            "regime": forecast.regime,
+            "model_name": forecast.model_name,
+            "skill_vs_baseline": forecast.skill_vs_baseline,
+            "predicted_vol_annualized": forecast.predicted_vol_annualized,
+        }
     return answer
 
 

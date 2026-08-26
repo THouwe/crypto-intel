@@ -6,8 +6,8 @@ loop**. Companion to [ARCHITECTURE.md](ARCHITECTURE.md) (the RAG core, phases
 S1–S8); this doc covers the new phases **S9–S12**. For usage see the
 [README](../README.md); for deployment see [DEPLOYMENT.md](DEPLOYMENT.md).
 
-> **Status:** **S9–S11 built** (see § 4–6 and the [ARCHITECTURE build history](ARCHITECTURE.md#build-history-phases));
-> S12 proposed. This is the spec to review and amend before each phase's code.
+> **Status:** **S9–S12 built** — the full ML expansion is complete (see § 4–7 and
+> the [ARCHITECTURE build history](ARCHITECTURE.md#build-history-phases)).
 
 ---
 
@@ -358,17 +358,31 @@ Tests (offline, deterministic — matching the existing style):
 > **Verified 2026-08-26:** mlflow 3.15 and evidently 0.7 both install and run on
 > **Python 3.14**. Default tracking is SQLite (not the deprecated file store).
 
-## 7. S12 — GenAI stitch (roadmap depth)
+## 7. S12 — GenAI stitch (**built**)
 
-- Inject the current `VolForecast` (regime + confidence/skill) into
-  `synthesize.py`'s prompt as **grounded market-state context**, so a cited answer
-  can note *how turbulent* conditions are when interpreting the move — with the
-  citations and the not-investment-advice line unchanged.
-- `ask` surfaces a one-line regime banner (`current regime: turbulent — model
-  xgboost, skill 0.18`) above the cited answer.
-- Add an explicit **stack table** to the docs naming the full RAG+ML surface
-  (embeddings, pgvector/Chroma, BM25, Claude API, MLflow, FastAPI, XGBoost, PyTorch,
-  DuckDB/BigQuery, Evidently) so it is CV-legible in one glance.
+- **Regime woven into synthesis.** `pipeline.ask` computes a best-effort
+  `VolForecast` for the event's asset (`_maybe_forecast`, never raises) and passes a
+  one-line market-state string into `synthesize.py` via a new `forecast_context`
+  parameter. `SYSTEM_PROMPT` gains a rule: the regime line is **background on how
+  turbulent conditions are — a volatility estimate, not a source, not a price
+  prediction, never cited or turned into advice.** Citations and the
+  not-investment-advice line are unchanged.
+- **Regime banner + structured field.** `ask` prints a one-line banner
+  (`Regime : ◐ NORMAL (68% ann. vol, model xgboost, skill +0.90)`) above the answer,
+  and the regime is attached to `Answer.market_state`
+  `{regime, model_name, skill_vs_baseline, predicted_vol_annualized}`. A `--no-regime`
+  flag (and `ask(..., with_regime=False)`) disables it; it also self-skips silently
+  when no model is trained for the asset (no extra network call in that case).
+- **Explicit stack table** naming the full RAG+ML surface is in the
+  [README](../README.md#tech-stack-at-a-glance) so it is CV-legible in one glance.
+- **Tests** (7, offline): the market-state string is background-not-advice, the
+  prompt weaving, the `SYSTEM_PROMPT` guardrail, a recording-client synthesis check
+  (regime present in the prompt, not citable), and `ask` attaching `market_state`
+  (and skipping it under `--no-regime`).
+
+**The ML expansion is complete.** All four CV gaps from the brief (§ 1) are closed:
+PyTorch/XGBoost/sklearn (S9), warehouse + SQL feature engineering (S10), the
+MLflow/CI/monitoring MLOps loop (S11), and the explicit GenAI↔ML product (S12).
 
 ---
 

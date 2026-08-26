@@ -324,9 +324,9 @@ The project was built in self-contained increments. All are complete.
 | **S9** | **Volatility / risk-regime forecasting** (`train` / `predict`): a `forecast/` subsystem — feature engineering, a model zoo (persistence baseline · scikit-learn · XGBoost/LightGBM · PyTorch LSTM) compared on a temporal split by skill-vs-baseline, and model-bundle persistence. Volatility only — never a price/trade call. See [ML_ROADMAP.md](ML_ROADMAP.md). |
 | **S10** | **Warehouse-backed feature pipeline** (`warehouse build` / `stats`): a `warehouse/` subsystem landing prices + doc metadata in **DuckDB** with SQL feature engineering (hourly gridding, rolling window functions, news aggregation); `train --source warehouse` consumes the SQL output. Optional **BigQuery** free-tier loader (`[bq]` extra). See [ML_ROADMAP.md](ML_ROADMAP.md). |
 | **S11** | **MLOps loop**: MLflow experiment tracking + model registry (`train --track`, SQLite backend), FastAPI serving (`/api/forecast`, `/monitoring`), GitHub Actions CI + retrain workflows, and Evidently drift monitoring (`monitor`). See [ML_ROADMAP.md](ML_ROADMAP.md). |
+| **S12** | **RAG↔forecast stitch**: `ask` weaves the current volatility regime into the synthesis prompt as market-state context (a regime banner + `Answer.market_state`), keeping citations and the not-advice guardrail. The two subsystems now read as one product. See [ML_ROADMAP.md](ML_ROADMAP.md). |
 
-Phase **S12** (a RAG↔forecast stitch) is specified in [ML_ROADMAP.md](ML_ROADMAP.md)
-and not yet built.
+The **ML expansion (S9–S12) is complete** — see [ML_ROADMAP.md](ML_ROADMAP.md).
 
 Beyond the original roadmap, the project also gained: a pluggable **pgvector**
 store backend, `ask-db`, rolling-window **retention** (`prune` / `pg_cron`), a
@@ -356,3 +356,9 @@ This tool explains market moves from public sources with citations. It must **no
 emit buy/sell/hold recommendations, price targets, or personalized financial
 advice. Synthesis is kept descriptive ("reports attribute the move to X [1], Y
 [2]") and `ask` output includes a "not investment advice" line.
+
+The **ML layer (S9–S12) holds the same wall**: it forecasts *volatility / risk
+regime only*, never price direction; the S12 regime woven into `ask` is background
+market-state context (a volatility estimate, not a source and not a prediction —
+never cited, never turned into a call), and every `predict` / `ask` output keeps
+the not-investment-advice line.

@@ -246,6 +246,8 @@ details, and [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for the hosted stack.
 
 ## Deployment (optional)
 
+**Web GUI deployed at [whathappenedcrypto](https://whathappenedcrypto.netlify.app/)**.
+
 The CLI runs entirely locally on embedded Chroma — no deployment needed. A hosted
 **web** deployment is also supported, split across three services:
 

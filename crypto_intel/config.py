@@ -82,6 +82,15 @@ class Settings(BaseSettings):
     bq_project: str | None = Field(default=None)  # GCP project for the [bq] loader
     bq_dataset: str = Field(default="crypto_intel")
 
+    # --- MLOps (phase S11) ---
+    # Local SQLite backend by default so tracking + the model registry run with
+    # zero infra (MLflow 3.x deprecated the file store; the registry needs a DB).
+    # Point at a remote MLflow server via MLFLOW_TRACKING_URI.
+    mlflow_tracking_uri: str = Field(default="sqlite:///data/mlflow.db")
+    mlflow_experiment: str = Field(default="crypto-intel-vol")
+    mlflow_registry_prefix: str = Field(default="crypto-intel-vol")
+    monitoring_path: Path = Field(default=Path("data/monitoring"))  # drift report HTML
+
     # --- Chroma collection name ---
     chroma_collection: str = Field(default="crypto_intel_chunks")
 

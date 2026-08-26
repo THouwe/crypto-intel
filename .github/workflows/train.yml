@@ -1,0 +1,67 @@
+name: Retrain forecast model
+
+# Manual or scheduled retraining that logs to MLflow and uploads the metrics +
+# tracking store as build artifacts. No auto-promotion: a human reviews the run
+# and promotes a version to the serving alias in the MLflow UI.
+on:
+  workflow_dispatch:
+    inputs:
+      asset:
+        description: "Ticker to retrain"
+        required: true
+        default: "ETH"
+  schedule:
+    - cron: "0 6 * * 1"   # weekly, Monday 06:00 UTC
+
+jobs:
+  retrain:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install (forecast + gbm + mlops)
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[forecast,gbm,mlops]"
+
+      - name: Generate a deterministic sample series
+        # Self-contained so the retrain loop doesn't depend on live CoinGecko /
+        # API rate limits. Swap for `--source coingecko` for a real retrain.
+        run: |
+          python - <<'PY'
+          import numpy as np
+          from datetime import datetime, timedelta, timezone
+          n = 1500
+          rng = np.random.default_rng(7)
+          t0 = datetime(2026, 1, 1, tzinfo=timezone.utc)
+          idx = np.arange(n)
+          vol = np.where((idx // 60) % 2 == 0, 0.004, 0.018)
+          price = 100.0 * np.exp(np.cumsum(rng.standard_normal(n) * vol))
+          with open("series.csv", "w") as f:
+              f.write("timestamp,price\n")
+              for i, p in enumerate(price):
+                  f.write(f"{(t0 + timedelta(hours=int(i))).isoformat()},{p:.6f}\n")
+          print("wrote series.csv", n, "rows")
+          PY
+
+      - name: Train + track
+        env:
+          ASSET: ${{ github.event.inputs.asset || 'ETH' }}
+        run: |
+          crypto-intel train --asset "$ASSET" \
+            --models baseline,sklearn,xgboost \
+            --offline series.csv --track
+
+      - name: Upload metrics + MLflow store
+        uses: actions/upload-artifact@v4
+        with:
+          name: retrain-artifacts
+          path: |
+            data/models/**/metrics.json
+            mlruns/**
+          if-no-files-found: warn

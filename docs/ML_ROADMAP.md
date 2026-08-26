@@ -6,8 +6,8 @@ loop**. Companion to [ARCHITECTURE.md](ARCHITECTURE.md) (the RAG core, phases
 S1–S8); this doc covers the new phases **S9–S12**. For usage see the
 [README](../README.md); for deployment see [DEPLOYMENT.md](DEPLOYMENT.md).
 
-> **Status:** **S9–S10 built** (see § 4–5 and the [ARCHITECTURE build history](ARCHITECTURE.md#build-history-phases));
-> S11–S12 proposed. This is the spec to review and amend before each phase's code.
+> **Status:** **S9–S11 built** (see § 4–6 and the [ARCHITECTURE build history](ARCHITECTURE.md#build-history-phases));
+> S12 proposed. This is the spec to review and amend before each phase's code.
 
 ---
 
@@ -322,25 +322,41 @@ Tests (offline, deterministic — matching the existing style):
   news aggregation, asset filtering, an end-to-end warehouse→train run, and the BQ
   row-mappers. **Config**: `warehouse_path`, `bq_project`, `bq_dataset`.
 
-## 6. S11 — MLOps loop (roadmap depth) — *highest-leverage half*
+## 6. S11 — MLOps loop (**built**) — *highest-leverage half*
 
-- **MLflow tracking + registry.** Wrap `train` to log params (L/H/S, model kind),
-  metrics (MAE/RMSE/skill/regime-F1), and the bundle as an artifact; register the
-  selected model as `crypto-intel-vol-<asset>`. `MLFLOW_TRACKING_URI` defaults to a
-  local `./mlruns` (file store) so it runs with zero infra; a remote URI is
-  configurable. Model **promotion** to a `serving` alias is a manual, reviewed step.
-- **Serving.** Extend the existing FastAPI app (`crypto_intel/web/app.py`) with
-  `GET /forecast?asset=ETH` loading the registered model → `VolForecast` JSON,
-  reusing the current Docker/Railway deployment so it ships live and clickable.
-- **CI/CD (GitHub Actions — no `.github/` exists yet).**
-  - `ci.yml`: on PR — install `.[dev,forecast]`, run `ruff`/lint + the full pytest
-    suite on a py3.11/3.12 matrix (torch-free: baseline+sklearn+gbm paths).
-  - `train.yml`: manual `workflow_dispatch` / scheduled — retrain, log to MLflow,
-    upload `metrics.json` as an artifact. No auto-promotion.
-- **Monitoring.** `crypto-intel monitor --asset ETH` builds an **Evidently** report
-  (feature drift + prediction drift, reference = training window vs. current) → a
-  static HTML page served at `/monitoring`. Clickable proof of production ML hygiene.
-- Config: `MLFLOW_TRACKING_URI`, `mlflow_experiment`.
+- **MLflow tracking + registry.** `mlops/tracking.py` — `train --track` logs params
+  (L/H/S, models, best), per-model val/test metrics (MAE/RMSE/skill/regime-F1), and
+  the model **bundle** as artifacts, then registers a servable `pyfunc` version
+  `crypto-intel-vol-<ASSET>`. `MLFLOW_TRACKING_URI` defaults to a local **SQLite**
+  backend (`sqlite:///data/mlflow.db`) — MLflow 3.x deprecated the file store and
+  the registry needs a DB, so SQLite is the zero-infra default; a remote URI is
+  configurable. Tracking is **best-effort** (a hiccup warns, never fails training).
+  Promotion to a `serving` alias is a manual, reviewed step. *Boundary:* the pyfunc
+  serves tabular forecasters (baseline/sklearn/xgboost/lightgbm); a sequence (LSTM)
+  best model is logged + tracked but not registered as a tabular pyfunc.
+- **Serving.** The existing FastAPI app gains `GET /api/forecast?asset=ETH[&model=]`
+  → `VolForecast` JSON (404 untrained, 503 if forecast extras absent) and
+  `GET /monitoring?asset=ETH` serving the drift HTML — reusing the current
+  Docker/Railway deployment so it ships live and clickable.
+- **CI/CD (GitHub Actions).** `.github/workflows/ci.yml`: on push/PR — install
+  `.[dev,forecast,gbm,warehouse]`, `ruff` (real-error select) + full `pytest` on a
+  **py3.11/3.12/3.13** matrix (torch-free; LSTM/MLflow/Evidently paths importorskip).
+  `.github/workflows/train.yml`: `workflow_dispatch` (asset input) + weekly cron —
+  generate a deterministic sample, `train --track`, upload `metrics.json` + `mlruns`
+  as artifacts. No auto-promotion.
+- **Monitoring.** `mlops/monitor.py` — training snapshots its feature distribution
+  into the bundle (`reference_features.csv`); `crypto-intel monitor --asset ETH`
+  builds an **Evidently** data-drift report (reference = training window vs. current)
+  → static HTML served at `/monitoring`. Drifted-column count + share summarized to
+  the terminal.
+- **Config**: `mlflow_tracking_uri`, `mlflow_experiment`, `mlflow_registry_prefix`,
+  `monitoring_path`. **Extras**: `[mlops]` (mlflow), `[monitor]` (evidently+pandas).
+- **Tests** (7, offline): reference round-trip, MLflow run+registry against a temp
+  SQLite store, an Evidently HTML report, current-feature geometry, and the
+  `/api/forecast` + `/monitoring` endpoints via `TestClient`.
+
+> **Verified 2026-08-26:** mlflow 3.15 and evidently 0.7 both install and run on
+> **Python 3.14**. Default tracking is SQLite (not the deprecated file store).
 
 ## 7. S12 — GenAI stitch (roadmap depth)
 

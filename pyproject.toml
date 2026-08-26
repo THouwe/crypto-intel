@@ -55,6 +55,14 @@ gbm = [
 dl = [
     "torch>=2.2",
 ]
+# DuckDB warehouse for the SQL feature pipeline (phase S10).
+warehouse = [
+    "duckdb>=1.0",
+]
+# Optional BigQuery free-tier loader (phase S10). Needs GCP credentials.
+bq = [
+    "google-cloud-bigquery>=3.0",
+]
 dev = [
     "pytest>=8.0",
 ]

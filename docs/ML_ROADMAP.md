@@ -6,8 +6,8 @@ loop**. Companion to [ARCHITECTURE.md](ARCHITECTURE.md) (the RAG core, phases
 S1–S8); this doc covers the new phases **S9–S12**. For usage see the
 [README](../README.md); for deployment see [DEPLOYMENT.md](DEPLOYMENT.md).
 
-> **Status:** **S9 built** (see § 4 and the [ARCHITECTURE build history](ARCHITECTURE.md#build-history-phases));
-> S10–S12 proposed. This is the spec to review and amend before each phase's code.
+> **Status:** **S9–S10 built** (see § 4–5 and the [ARCHITECTURE build history](ARCHITECTURE.md#build-history-phases));
+> S11–S12 proposed. This is the spec to review and amend before each phase's code.
 
 ---
 
@@ -297,20 +297,30 @@ Tests (offline, deterministic — matching the existing style):
 
 ---
 
-## 5. S10 — Scale: warehouse-backed features (roadmap depth)
+## 5. S10 — Scale: warehouse-backed features (**built**)
 
-- **DuckDB (embedded default).** `crypto_intel/warehouse/duck.py`: land the hourly
-  price history and document metadata into DuckDB tables (`prices`, `documents`,
-  `features`); express feature engineering as SQL (window functions for rolling
-  RV/returns) so "large-scale pipeline" is backed by real tooling, not a claim.
-  `crypto-intel warehouse build --asset ETH` populates it; `train` can read features
-  from the warehouse instead of computing them in-process (`--source warehouse`).
+- **DuckDB (embedded default).** `crypto_intel/warehouse/duck.py` — `DuckWarehouse`
+  lands price history + document metadata into `prices` / `documents` tables and
+  engineers features in **SQL**: hourly gridding (`time_bucket` +
+  `last(... ORDER BY ...)`), rolling window functions (log return, rolling realized
+  vol, rolling mean return) materialized into a queryable `price_features` table,
+  and per-hour news aggregation (`GROUP BY`). So "large-scale pipeline" is backed by
+  real tooling, not a claim.
+- **`train --source warehouse` genuinely consumes SQL output**: it reads the
+  SQL-gridded price series and the SQL-aggregated hourly news counts back out
+  (`warehouse_news_fn`) and feeds them into the proven S9 windower — no logic
+  duplicated, no divergence. Verified to reproduce the direct-path skill numbers.
 - **BigQuery (optional).** `warehouse/bq.py` behind a `[bq]` extra + a service
   account (`GOOGLE_APPLICATION_CREDENTIALS`); `warehouse build --dest bigquery`
-  loads the same schema into a BigQuery free-tier dataset, making the
-  "cloud warehouse" line literally true. Local/CI default stays DuckDB (no GCP auth).
-- Tests: schema creation + a SQL feature query on a seeded in-memory DuckDB (offline).
-- Config: `warehouse_path`, `bq_project`, `bq_dataset`.
+  loads the same schema into a BigQuery free-tier dataset (`bq_project`/`bq_dataset`),
+  making the "cloud warehouse" line literally true. Local/CI default stays DuckDB
+  (no GCP auth). The pure row-mappers (`price_rows`/`document_rows`) are unit-tested;
+  the network load path is guarded and exercised manually.
+- **CLI**: `warehouse build --asset ETH [--offline csv] [--dest duckdb|bigquery]
+  [--rolling-hours N]` and `warehouse stats [--asset ETH]`.
+- **Tests** (8, offline): grid round-trip, the SQL window-function feature build,
+  news aggregation, asset filtering, an end-to-end warehouse→train run, and the BQ
+  row-mappers. **Config**: `warehouse_path`, `bq_project`, `bq_dataset`.
 
 ## 6. S11 — MLOps loop (roadmap depth) — *highest-leverage half*
 

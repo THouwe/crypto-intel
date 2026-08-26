@@ -77,6 +77,11 @@ class Settings(BaseSettings):
     regime_low_pct: float = Field(default=33.0)
     regime_high_pct: float = Field(default=66.0)
 
+    # --- Warehouse (phase S10) ---
+    warehouse_path: Path = Field(default=Path("data/warehouse.duckdb"))
+    bq_project: str | None = Field(default=None)  # GCP project for the [bq] loader
+    bq_dataset: str = Field(default="crypto_intel")
+
     # --- Chroma collection name ---
     chroma_collection: str = Field(default="crypto_intel_chunks")
 
@@ -106,6 +111,10 @@ class Settings(BaseSettings):
     @property
     def eval_cases_file(self) -> Path:
         return self.resolve_path(self.eval_cases_path)
+
+    @property
+    def warehouse_file(self) -> Path:
+        return self.resolve_path(self.warehouse_path)
 
     @property
     def feeds_file(self) -> Path:

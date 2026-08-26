@@ -7,6 +7,11 @@ data/store/
 # Trained forecast model bundles + metrics (S9 artifacts)
 data/models/
 
+# DuckDB warehouse (S10 artifact)
+data/warehouse.duckdb
+*.duckdb
+*.duckdb.wal
+
 # Python
 __pycache__/
 *.py[cod]

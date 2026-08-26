@@ -454,8 +454,12 @@ def train(
         "baseline,sklearn,xgboost,lstm", "--models",
         help="Comma list: baseline,sklearn,xgboost,lightgbm,lstm.",
     ),
+    source: str = typer.Option(
+        "coingecko", "--source",
+        help="Where price data comes from: coingecko | warehouse | offline.",
+    ),
     offline: str = typer.Option(
-        None, "--offline", help="Train from a timestamp,price CSV (no network)."
+        None, "--offline", help="Train from a timestamp,price CSV (implies --source offline)."
     ),
     news: bool = typer.Option(
         False, "--news", help="Add exogenous news features from the document store."
@@ -477,9 +481,29 @@ def train(
     days = history_days or settings.forecast_history_days
     model_list = [m.strip() for m in models.split(",") if m.strip()]
 
-    if offline:
+    news_fn = news_feature_fn(asset, settings) if news else None
+
+    if offline or source == "offline":
+        if not offline:
+            typer.echo("--source offline requires --offline <csv>.")
+            raise typer.Exit(code=1)
         typer.echo(f"Loading offline series from {offline} ...")
         series = load_series_csv(Path(offline))
+    elif source == "warehouse":
+        from .warehouse.duck import DuckWarehouse, warehouse_news_fn
+        wh_path = settings.warehouse_file
+        if not wh_path.exists():
+            typer.echo(f"No warehouse at {wh_path}. Run:  crypto-intel warehouse build --asset {asset.upper()}")
+            raise typer.Exit(code=1)
+        typer.echo(f"Reading SQL-gridded {asset.upper()} series from warehouse {wh_path} ...")
+        wh = DuckWarehouse(wh_path)
+        series = wh.read_price_grid(asset)
+        if news:
+            news_fn = warehouse_news_fn(wh.news_counts_by_hour(asset))
+        wh.close()
+        if not series:
+            typer.echo(f"No prices for {asset.upper()} in the warehouse.")
+            raise typer.Exit(code=1)
     else:
         from .prices import PriceError
         typer.echo(f"Fetching {days}d of {asset.upper()} history from CoinGecko ...")
@@ -488,8 +512,6 @@ def train(
         except PriceError as exc:
             typer.echo(f"Could not fetch price history: {exc}")
             raise typer.Exit(code=1)
-
-    news_fn = news_feature_fn(asset, settings) if news else None
     X, y, seqs, names, idx, _, _ = prepare_dataset(series, L, H, S, news_fn=news_fn)
     typer.echo(f"Built {X.shape[0]} windows × {X.shape[1]} features (L={L}, H={H}, S={S}).")
 
@@ -574,6 +596,107 @@ def predict(
     typer.echo("")
     for note in fc.notes:
         typer.echo(note)
+
+
+# --------------------------------------------------------------------------- #
+# Warehouse (phase S10)                                                       #
+# --------------------------------------------------------------------------- #
+
+warehouse_app = typer.Typer(help="Warehouse-backed feature pipeline (DuckDB / BigQuery).")
+app.add_typer(warehouse_app, name="warehouse")
+
+
+def _require_warehouse():
+    try:
+        import duckdb  # noqa: F401
+    except ImportError:
+        typer.echo("Warehouse dependencies not installed. Run:  pip install -e .[warehouse]")
+        raise typer.Exit(code=1)
+
+
+@warehouse_app.command("build")
+def warehouse_build(
+    asset: str = typer.Option(..., "--asset", help="Ticker, e.g. ETH."),
+    history_days: int = typer.Option(None, "--history-days", help="Days of price history."),
+    offline: str = typer.Option(None, "--offline", help="Load prices from a CSV instead of CoinGecko."),
+    dest: str = typer.Option("duckdb", "--dest", help="Destination: duckdb | bigquery."),
+    rolling_hours: int = typer.Option(24, "--rolling-hours", help="Rolling feature window (hours)."),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Verbose logging."),
+) -> None:
+    """Land prices + document metadata and engineer features in SQL."""
+    _configure_logging(verbose)
+    _require_warehouse()
+    settings = get_settings()
+
+    from pathlib import Path
+    from .forecast.dataset import load_series_csv, fetch_price_history
+    from .pipeline import iter_documents
+
+    days = history_days or settings.forecast_history_days
+    if offline:
+        typer.echo(f"Loading offline series from {offline} ...")
+        series = load_series_csv(Path(offline))
+    else:
+        from .prices import PriceError
+        typer.echo(f"Fetching {days}d of {asset.upper()} history from CoinGecko ...")
+        try:
+            series = fetch_price_history(asset, days, settings)
+        except PriceError as exc:
+            typer.echo(f"Could not fetch price history: {exc}")
+            raise typer.Exit(code=1)
+
+    documents = list(iter_documents(settings.documents_file))
+
+    if dest == "bigquery":
+        if not settings.bq_project:
+            typer.echo("Set BQ_PROJECT (and GOOGLE_APPLICATION_CREDENTIALS) for --dest bigquery.")
+            raise typer.Exit(code=1)
+        try:
+            from .warehouse.bq import load_to_bigquery
+            summary = load_to_bigquery(
+                settings.bq_project, settings.bq_dataset, asset, series, documents
+            )
+        except (ImportError, RuntimeError) as exc:
+            typer.echo(f"BigQuery load failed: {exc}")
+            raise typer.Exit(code=1)
+        typer.echo(f"Loaded to BigQuery {summary['dataset']}: "
+                   f"{summary['prices']} prices, {summary['documents']} documents.")
+        return
+
+    from .warehouse.duck import DuckWarehouse
+    wh_path = settings.warehouse_file
+    wh = DuckWarehouse(wh_path)
+    n_prices = wh.load_prices(asset, series)
+    n_docs = wh.load_documents(asset, documents)
+    n_feats = wh.build_features(asset, rolling_hours=rolling_hours)
+    wh.close()
+    typer.echo(f"Warehouse {wh_path}")
+    typer.echo(f"  prices loaded        : {n_prices}")
+    typer.echo(f"  documents loaded     : {n_docs}")
+    typer.echo(f"  SQL feature rows     : {n_feats}  (rolling {rolling_hours}h)")
+    typer.echo(f"Train from it with:  crypto-intel train --asset {asset.upper()} --source warehouse")
+
+
+@warehouse_app.command("stats")
+def warehouse_stats(
+    asset: str = typer.Option(None, "--asset", help="Restrict to one ticker."),
+) -> None:
+    """Show warehouse row counts + coverage window."""
+    _require_warehouse()
+    settings = get_settings()
+    wh_path = settings.warehouse_file
+    if not wh_path.exists():
+        typer.echo(f"No warehouse at {wh_path}. Run:  crypto-intel warehouse build --asset ETH")
+        raise typer.Exit(code=1)
+
+    from .warehouse.duck import DuckWarehouse
+    wh = DuckWarehouse(wh_path)
+    s = wh.stats(asset)
+    wh.close()
+    typer.echo(f"Warehouse {wh_path}  ({s['asset']})")
+    typer.echo(f"  prices    : {s['prices']}")
+    typer.echo(f"  documents : {s['documents']}")
+    typer.echo(f"  window    : {s['from']}  ->  {s['to']}")
 
 
 def _force_utf8_output() -> None:

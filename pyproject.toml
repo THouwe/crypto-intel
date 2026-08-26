@@ -39,6 +39,22 @@ pg = [
     "psycopg[binary]>=3.1",
     "pgvector>=0.2.5",
 ]
+# Forecasting subsystem (phase S9). Baseline + sklearn + feature engineering.
+# Kept out of core so `pip install -e .` stays lean and torch-free.
+forecast = [
+    "numpy>=1.26",
+    "scikit-learn>=1.4",
+    "joblib>=1.3",
+]
+# Gradient-boosted trees for the forecast zoo (EMBED nothing else).
+gbm = [
+    "xgboost>=2.0",
+    "lightgbm>=4.0",
+]
+# PyTorch sequence model (LSTM). Heavy; opt-in.
+dl = [
+    "torch>=2.2",
+]
 dev = [
     "pytest>=8.0",
 ]

@@ -49,7 +49,8 @@ and reproducible.
   optional keyword (BM25) rerank.
 - Answer synthesis with the Anthropic Claude API, returning a grounded explanation
   with numbered inline citations.
-- A `typer` CLI: `ingest`, `stats`, `price-event`, `ask`, `eval`, `prune`, `ask-db`.
+- A `typer` CLI: `ingest`, `stats`, `price-event`, `ask`, `eval`, `prune`, `ask-db`,
+  and the S9 forecasting commands `train` / `predict`.
 - An optional **FastAPI web GUI** over `price-event` + evidence retrieval (no
   synthesis — see [GUI.md](GUI.md)).
 - A `pytest` suite (with fixtures + a synthetic price series) so the core logic
@@ -214,7 +215,8 @@ SOL:  {coingecko_id: solana,   aliases: [sol, solana]}
 ## Module responsibilities
 
 - `crypto_intel/cli.py` — `typer` app; wires subcommands (`ingest`, `stats`,
-  `price-event`, `ask`, `eval`, `prune`, `ask-db`, `serve`) to `pipeline.py`.
+  `price-event`, `ask`, `eval`, `prune`, `ask-db`, `serve`, `train`, `predict`)
+  to `pipeline.py` and `forecast/`.
 - `crypto_intel/config.py` — `pydantic-settings` object: API keys, paths, model
   name, embedding/store backend, defaults (lookback, k). Loads `.env`.
 - `crypto_intel/models.py` — the pydantic models above; `SourceType` enum.
@@ -248,6 +250,11 @@ SOL:  {coingecko_id: solana,   aliases: [sol, solana]}
 - `crypto_intel/pipeline.py` — `ingest_all`, `retrieve_context`, `ask`, `ask_db`,
   `prune_all` orchestration + the JSONL document store helpers.
 - `crypto_intel/evaluate.py` — the `eval` scorecard (retrieval + citation coverage).
+- `crypto_intel/forecast/` — the S9 forecasting subsystem (optional extras):
+  `features.py` (pure feature engineering + supervised windowing), `models.py`
+  (the `Forecaster` zoo + bundle save/load), `dataset.py` (history fetch, CSV
+  loader, optional news features), `train.py` (build → split → compare → persist),
+  `predict.py` (bundle → `VolForecast`). Wired to `train` / `predict` in `cli.py`.
 - `crypto_intel/web/app.py` — FastAPI app for the optional GUI (see [GUI.md](GUI.md)).
 - `crypto_intel/data/feeds.yaml`, `assets.yaml` — configuration (feed list +
   ticker/CoinGecko-id map).
@@ -265,6 +272,8 @@ crypto-intel/
 │   ├── normalize.py · chunking.py · embeddings.py
 │   ├── store.py · pgstore.py · prices.py
 │   ├── retrieve.py · synthesize.py · pipeline.py · evaluate.py
+│   ├── forecast/                     # S9: volatility/regime forecasting (optional extras)
+│   │   ├── features.py · models.py · dataset.py · train.py · predict.py
 │   ├── ingest/
 │   │   ├── base.py · registry.py · rss.py · reddit.py · coinmarketcap.py
 │   ├── web/
@@ -296,6 +305,11 @@ The project was built in self-contained increments. All are complete.
 | **S6** | Grounded synthesis with inline `[n]` citations; full `ask` with a **Sources** list. |
 | **S7** | Optional CMC connector, rounded-out test suite, `ingest --all`, clean-clone README. |
 | **S8** | `eval` scorecard — retrieval hit-rate + citation coverage over a committed case set. |
+| **S9** | **Volatility / risk-regime forecasting** (`train` / `predict`): a `forecast/` subsystem — feature engineering, a model zoo (persistence baseline · scikit-learn · XGBoost/LightGBM · PyTorch LSTM) compared on a temporal split by skill-vs-baseline, and model-bundle persistence. Volatility only — never a price/trade call. See [ML_ROADMAP.md](ML_ROADMAP.md). |
+
+Phases **S10–S12** (warehouse-backed features, an MLflow/CI/monitoring MLOps loop,
+and a RAG↔forecast stitch) are specified in [ML_ROADMAP.md](ML_ROADMAP.md) and not
+yet built.
 
 Beyond the original roadmap, the project also gained: a pluggable **pgvector**
 store backend, `ask-db`, rolling-window **retention** (`prune` / `pg_cron`), a

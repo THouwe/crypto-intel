@@ -433,6 +433,149 @@ def serve(
     uvicorn.run("crypto_intel.web.app:app", host=host, port=port, reload=reload)
 
 
+def _require_forecast():
+    """Import the forecast subsystem, or exit with an install hint."""
+    try:
+        import numpy  # noqa: F401  — proxy for the `forecast` extra
+    except ImportError:
+        typer.echo("Forecast dependencies not installed. Run:  pip install -e .[forecast]")
+        typer.echo("For boosted trees / the LSTM add:  pip install -e .[gbm,dl]")
+        raise typer.Exit(code=1)
+
+
+@app.command()
+def train(
+    asset: str = typer.Option(..., "--asset", help="Ticker, e.g. ETH."),
+    history_days: int = typer.Option(None, "--history-days", help="Days of history to fetch."),
+    lookback: int = typer.Option(None, "--lookback", help="Lookback window (hours)."),
+    horizon: int = typer.Option(None, "--horizon", help="Forecast horizon (hours)."),
+    stride: int = typer.Option(None, "--stride", help="Window stride (hours)."),
+    models: str = typer.Option(
+        "baseline,sklearn,xgboost,lstm", "--models",
+        help="Comma list: baseline,sklearn,xgboost,lightgbm,lstm.",
+    ),
+    offline: str = typer.Option(
+        None, "--offline", help="Train from a timestamp,price CSV (no network)."
+    ),
+    news: bool = typer.Option(
+        False, "--news", help="Add exogenous news features from the document store."
+    ),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Verbose logging."),
+) -> None:
+    """Train + compare volatility-forecast models; persist the best (phase S9)."""
+    _configure_logging(verbose)
+    _require_forecast()
+    settings = get_settings()
+
+    from pathlib import Path
+    from .forecast.dataset import load_series_csv, fetch_price_history, prepare_dataset, news_feature_fn
+    from .forecast.train import train_models
+
+    L = lookback or settings.forecast_lookback_hours
+    H = horizon or settings.forecast_horizon_hours
+    S = stride or settings.forecast_stride_hours
+    days = history_days or settings.forecast_history_days
+    model_list = [m.strip() for m in models.split(",") if m.strip()]
+
+    if offline:
+        typer.echo(f"Loading offline series from {offline} ...")
+        series = load_series_csv(Path(offline))
+    else:
+        from .prices import PriceError
+        typer.echo(f"Fetching {days}d of {asset.upper()} history from CoinGecko ...")
+        try:
+            series = fetch_price_history(asset, days, settings)
+        except PriceError as exc:
+            typer.echo(f"Could not fetch price history: {exc}")
+            raise typer.Exit(code=1)
+
+    news_fn = news_feature_fn(asset, settings) if news else None
+    X, y, seqs, names, idx, _, _ = prepare_dataset(series, L, H, S, news_fn=news_fn)
+    typer.echo(f"Built {X.shape[0]} windows × {X.shape[1]} features (L={L}, H={H}, S={S}).")
+
+    try:
+        report = train_models(
+            X, y, seqs, names, idx,
+            asset=asset, lookback=L, horizon=H, stride=S,
+            models=model_list,
+            low_pct=settings.regime_low_pct, high_pct=settings.regime_high_pct,
+            models_dir=settings.resolve_path(settings.models_path),
+        )
+    except (ValueError, RuntimeError) as exc:
+        typer.echo(f"Training failed: {exc}")
+        raise typer.Exit(code=1)
+
+    _print_train_report(report, settings)
+
+
+def _print_train_report(report: dict, settings) -> None:
+    typer.echo("")
+    typer.echo(f"Model comparison — {report['asset']}  (test split, skill vs. persistence baseline)")
+    typer.echo("-" * 68)
+    typer.echo(f"{'model':<12} {'MAE':>9} {'RMSE':>9} {'R2':>7} {'skill':>8} {'regimeF1':>9}")
+    for name, res in report["models"].items():
+        t = res["test"]
+        mark = "  <- best" if name == report["best"] else ""
+        typer.echo(
+            f"{name:<12} {t['mae']:>9.5f} {t['rmse']:>9.5f} {t['r2']:>7.3f} "
+            f"{t['skill']:>8.3f} {t['regime_f1']:>9.3f}{mark}"
+        )
+    for name, why in report.get("skipped", {}).items():
+        typer.echo(f"{name:<12} skipped — {why}")
+    typer.echo("")
+    typer.echo(f"Best model : {report['best']}")
+    if "bundle_dir" in report:
+        typer.echo(f"Saved to   : {report['bundle_dir']}")
+        # Write the full comparison next to the bundle for the record.
+        import json
+        from pathlib import Path
+        metrics_path = Path(report["bundle_dir"]).parent / "metrics.json"
+        metrics_path.write_text(json.dumps(report, indent=2, default=str), encoding="utf-8")
+        typer.echo(f"Metrics    : {metrics_path}")
+
+
+@app.command()
+def predict(
+    asset: str = typer.Option(..., "--asset", help="Ticker, e.g. ETH."),
+    model: str = typer.Option(None, "--model", help="Pick a model if several are trained."),
+    offline: str = typer.Option(
+        None, "--offline", help="Predict from a timestamp,price CSV (no network)."
+    ),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Verbose logging."),
+) -> None:
+    """Forecast next-window volatility / risk regime for an asset (phase S9)."""
+    _configure_logging(verbose)
+    _require_forecast()
+    settings = get_settings()
+
+    from pathlib import Path
+    from .forecast.predict import predict as run_predict
+    from .forecast.dataset import load_series_csv
+
+    series = load_series_csv(Path(offline)) if offline else None
+    try:
+        fc = run_predict(asset, model=model, settings=settings, series=series)
+    except (FileNotFoundError, ValueError) as exc:
+        typer.echo(f"Could not forecast: {exc}")
+        raise typer.Exit(code=1)
+
+    regime_glyph = {"calm": "○", "normal": "◐", "turbulent": "●"}[fc.regime]
+    typer.echo(f"Volatility forecast — {fc.asset}  (model: {fc.model_name})")
+    typer.echo("=" * 52)
+    typer.echo(f"As of         : {_fmt_ts(fc.as_of)}")
+    typer.echo(f"Horizon       : next {fc.horizon_hours}h  (lookback {fc.lookback_hours}h)")
+    typer.echo(f"Predicted vol : {fc.predicted_vol:.5f}  (annualized {fc.predicted_vol_annualized:.2%})")
+    typer.echo(f"Risk regime   : {regime_glyph} {fc.regime.upper()}")
+    if fc.skill_vs_baseline is not None:
+        typer.echo(f"Model skill   : {fc.skill_vs_baseline:+.3f} vs. persistence baseline")
+    if fc.drivers:
+        top = ", ".join(f"{k} ({v:.2f})" for k, v in fc.drivers.items())
+        typer.echo(f"Top drivers   : {top}")
+    typer.echo("")
+    for note in fc.notes:
+        typer.echo(note)
+
+
 def _force_utf8_output() -> None:
     """Ensure stdout/stderr use UTF-8 so glyphs survive piping on Windows.
 

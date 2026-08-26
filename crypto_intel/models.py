@@ -89,3 +89,26 @@ class Answer(BaseModel):
     citations: list[Citation] = Field(default_factory=list)
     retrieved_chunk_ids: list[str] = Field(default_factory=list)
     notes: list[str] = Field(default_factory=list)  # e.g. "thin evidence"
+
+
+class VolForecast(BaseModel):
+    """A next-window volatility / risk-regime forecast (phase S9).
+
+    Deliberately **not** a price-direction or trade call — see
+    ``docs/ML_ROADMAP.md`` § 1.1. ``notes`` always carries the
+    not-investment-advice line so the guardrail travels with the object.
+    """
+
+    asset: str  # "ETH"
+    as_of: datetime  # UTC — end of the lookback window the forecast is made from
+    lookback_hours: int
+    horizon_hours: int
+    predicted_vol: float  # realized vol over the next horizon window
+    predicted_vol_annualized: float
+    regime: Literal["calm", "normal", "turbulent"]
+    regime_thresholds: dict = Field(default_factory=dict)  # calm_max / turbulent_min
+    model_name: str  # "baseline" | "sklearn" | "xgboost" | "lstm" | ...
+    skill_vs_baseline: float | None = None  # from the bundle's test metrics
+    trained_at: datetime | None = None
+    drivers: dict = Field(default_factory=dict)  # top feature contributions
+    notes: list[str] = Field(default_factory=list)

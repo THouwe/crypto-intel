@@ -4,6 +4,9 @@
 # Local data store (Chroma db, documents.jsonl, price cache)
 data/store/
 
+# Trained forecast model bundles + metrics (S9 artifacts)
+data/models/
+
 # Python
 __pycache__/
 *.py[cod]

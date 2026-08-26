@@ -68,6 +68,15 @@ class Settings(BaseSettings):
     default_lookback_hours: int = Field(default=48)
     default_k: int = Field(default=6)
 
+    # --- Forecasting (phase S9) ---
+    models_path: Path = Field(default=Path("data/models"))
+    forecast_lookback_hours: int = Field(default=72)
+    forecast_horizon_hours: int = Field(default=24)
+    forecast_stride_hours: int = Field(default=6)
+    forecast_history_days: int = Field(default=90)  # CoinGecko free-tier hourly ceiling
+    regime_low_pct: float = Field(default=33.0)
+    regime_high_pct: float = Field(default=66.0)
+
     # --- Chroma collection name ---
     chroma_collection: str = Field(default="crypto_intel_chunks")
 

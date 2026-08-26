@@ -89,6 +89,10 @@ class Answer(BaseModel):
     citations: list[Citation] = Field(default_factory=list)
     retrieved_chunk_ids: list[str] = Field(default_factory=list)
     notes: list[str] = Field(default_factory=list)  # e.g. "thin evidence"
+    # S12: current volatility regime woven in as market-state context (when a
+    # forecast model is trained). {regime, model_name, skill_vs_baseline,
+    # predicted_vol_annualized}. Background only — never a price/trade call.
+    market_state: dict | None = None
 
 
 class VolForecast(BaseModel):

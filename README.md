@@ -19,12 +19,14 @@ What makes it more than "chat over documents":
 
 ---
 
-## Status: complete (S1–S11)
+## Status: complete (S1–S12)
 
 The RAG pipeline runs end-to-end (`ingest → stats → price-event → ask`); S9 adds a
 volatility-forecasting subsystem (`train → predict`), S10 a warehouse-backed SQL
-feature pipeline (`warehouse build → train --source warehouse`), and S11 a full
-MLOps loop (MLflow tracking/registry, serving, CI, drift monitoring).
+feature pipeline (`warehouse build → train --source warehouse`), S11 a full MLOps
+loop (MLflow tracking/registry, serving, CI, drift monitoring), and S12 stitches the
+two halves together — `ask` weaves the current volatility regime into its cited
+answer.
 
 | Phase | What it delivers | State |
 |---|---|---|
@@ -39,11 +41,12 @@ MLOps loop (MLflow tracking/registry, serving, CI, drift monitoring).
 | S9 | **Volatility / risk-regime forecasting** — `train`/`predict`, a baseline · scikit-learn · XGBoost/LightGBM · PyTorch-LSTM model zoo compared by skill-vs-baseline | ✅ |
 | S10 | **Warehouse-backed feature pipeline** — `warehouse build`, DuckDB SQL feature engineering (gridding, rolling window functions, news aggregation) + optional BigQuery loader; `train --source warehouse` | ✅ |
 | S11 | **MLOps loop** — MLflow tracking + model registry (`train --track`), FastAPI serving (`/api/forecast`, `/monitoring`), GitHub Actions CI + retrain, Evidently drift monitoring (`monitor`) | ✅ |
+| S12 | **RAG↔forecast stitch** — `ask` weaves the current volatility regime into its synthesis prompt + a regime banner (`Answer.market_state`), citations and the not-advice guardrail intact | ✅ |
 
-Phase **S12** (a RAG↔forecast stitch — inject the current regime into cited `ask`
-answers) is specified in [docs/ML_ROADMAP.md](docs/ML_ROADMAP.md).
+The **ML expansion (S9–S12) is complete** — see [docs/ML_ROADMAP.md](docs/ML_ROADMAP.md)
+for the full design spec.
 
-**159 tests** — 158 pass fully offline; 1 skipped (a live-DB test gated on an env var).
+**166 tests** — 165 pass fully offline; 1 skipped (a live-DB test gated on an env var).
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the design spec and architecture
 diagram, [docs/ML_ROADMAP.md](docs/ML_ROADMAP.md) for the ML expansion (S9–S12), and
 the [As-built notes](#as-built-notes) below for intentional deviations.
@@ -56,6 +59,24 @@ the [As-built notes](#as-built-notes) below for intentional deviations.
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Design spec: scope, tech stack, pipeline diagram, data model, module map, build history. |
 | [docs/GUI.md](docs/GUI.md) | The optional FastAPI web GUI: endpoints, frontend, the no-synthesis design. |
 | [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | Hosted stack: Netlify frontend + Railway API + Supabase pgvector, Docker, retention. |
+| [docs/ML_ROADMAP.md](docs/ML_ROADMAP.md) | The ML expansion (S9–S12): forecasting, warehouse, MLOps loop, the GenAI stitch. |
+
+## Tech stack at a glance
+
+One system spanning retrieval-augmented generation and an end-to-end ML/MLOps loop.
+
+| Layer | Tools |
+|---|---|
+| **GenAI / RAG** | Anthropic Claude API (grounded, cited synthesis) · MiniLM embeddings (ONNX / sentence-transformers) · **Chroma** + **Postgres/pgvector** vector stores · BM25 rerank · a retrieval + citation-coverage `eval` scorecard |
+| **Modelling (S9)** | **scikit-learn** · **XGBoost / LightGBM** · **PyTorch** (LSTM) · a persistence baseline, compared on a temporal split by skill-vs-baseline |
+| **Data / scale (S10)** | **DuckDB** SQL feature engineering (window functions, time-bucketing, aggregation) · optional **BigQuery** free-tier loader |
+| **MLOps (S11)** | **MLflow** experiment tracking + model registry · **FastAPI** model serving · **GitHub Actions** CI + scheduled retraining · **Evidently** drift monitoring · Docker |
+| **Stitch (S12)** | the volatility **regime** conditions the cited `ask` answer — the RAG and ML halves as one product |
+| **Engineering** | Python 3.11–3.14 · `typer` CLI · `pydantic` / `pydantic-settings` · **166 tests** (pytest, offline) · deployed (Netlify → Railway → Supabase) |
+
+> **Guardrail throughout.** Decision-support, **not** investment advice: the models
+> forecast volatility / risk regime, never price direction; every answer keeps a
+> "not investment advice" line.
 
 ---
 
@@ -165,7 +186,7 @@ answers (fraction of answer sentences carrying a `[n]` marker).
 | `ingest` | Fetch → normalize → dedup → embed → persist | `--sources news,exchange,regulator,cmc,reddit`, `--all`, `--lookback-hours N`, `-v` |
 | `stats` | Per-source doc/chunk counts + ingest window | — |
 | `price-event` | Confirm a move directly (no retrieval) | `--asset ETH`, `--hours N`, `-v` |
-| `ask` | Explain a move with cited evidence | `--asset`, `--hours`, `--k`, `--sources`, `--no-synth`, `--model`, `-v` |
+| `ask` | Explain a move with cited evidence (+ S12 volatility-regime context) | `--asset`, `--hours`, `--k`, `--sources`, `--no-synth`, `--no-regime`, `--model`, `-v` |
 | `eval` | Score retrieval (+ optional citation coverage) over `data/eval_cases.json` | `--cases`, `--synth`, `--k`, `-v` |
 | `prune` | Delete stored content older than a rolling retention window | `--keep-days` (default 7), `-v` |
 | `ask-db` | Retrieve evidence from the **pgvector DB** (DB-backed `ask --no-synth`) | `--asset`, `--hours`, `--k`, `--sources`, `-v` |

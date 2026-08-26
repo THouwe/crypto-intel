@@ -42,6 +42,10 @@ SYSTEM_PROMPT = (
     "- If the evidence is thin, off-topic, or does not actually explain the move, say "
     "so plainly (e.g. 'the available sources do not clearly explain this move') rather "
     "than forcing an explanation.\n"
+    "- A 'current volatility regime' line, when present, is background on how "
+    "turbulent conditions are right now — a volatility estimate from a separate "
+    "model, NOT a source. Do not cite it, do not treat it as a price prediction, and "
+    "do not turn it into a directional or trading call.\n"
     "- This is decision-support, NOT financial advice. Do not give buy/sell/hold "
     "recommendations, price targets, or personalized advice."
 )
@@ -71,11 +75,17 @@ def _numbered_context(chunks: list[RetrievedChunk]) -> str:
 
 
 def build_user_prompt(
-    question: str, event: PriceEvent | None, chunks: list[RetrievedChunk]
+    question: str,
+    event: PriceEvent | None,
+    chunks: list[RetrievedChunk],
+    forecast_context: str | None = None,
 ) -> str:
+    market = _event_facts(event)
+    if forecast_context:
+        market += f"\n{forecast_context}"
     return (
         f"Question: {question}\n\n"
-        f"Market context:\n{_event_facts(event)}\n\n"
+        f"Market context:\n{market}\n\n"
         f"Numbered sources (cite these with [n]):\n{_numbered_context(chunks)}\n\n"
         "Write the grounded explanation now, using [n] citations."
     )
@@ -121,6 +131,7 @@ def synthesize(
     settings: Settings | None = None,
     model: str | None = None,
     client=None,
+    forecast_context: str | None = None,
 ) -> Answer:
     """Synthesize a grounded, cited :class:`Answer` from retrieved evidence.
 
@@ -160,7 +171,12 @@ def synthesize(
         max_tokens=2000,
         system=SYSTEM_PROMPT,
         thinking={"type": "disabled"},  # concise, grounded output; no reasoning spend
-        messages=[{"role": "user", "content": build_user_prompt(question, event, chunks)}],
+        messages=[
+            {
+                "role": "user",
+                "content": build_user_prompt(question, event, chunks, forecast_context),
+            }
+        ],
     )
 
     answer_text = _extract_text(response).strip()

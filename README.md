@@ -19,11 +19,12 @@ What makes it more than "chat over documents":
 
 ---
 
-## Status: complete (S1–S10)
+## Status: complete (S1–S11)
 
 The RAG pipeline runs end-to-end (`ingest → stats → price-event → ask`); S9 adds a
-volatility-forecasting subsystem (`train → predict`) and S10 a warehouse-backed
-SQL feature pipeline (`warehouse build → train --source warehouse`).
+volatility-forecasting subsystem (`train → predict`), S10 a warehouse-backed SQL
+feature pipeline (`warehouse build → train --source warehouse`), and S11 a full
+MLOps loop (MLflow tracking/registry, serving, CI, drift monitoring).
 
 | Phase | What it delivers | State |
 |---|---|---|
@@ -37,11 +38,12 @@ SQL feature pipeline (`warehouse build → train --source warehouse`).
 | S8 | `eval` scorecard — retrieval hit-rate + citation coverage over a committed case set | ✅ |
 | S9 | **Volatility / risk-regime forecasting** — `train`/`predict`, a baseline · scikit-learn · XGBoost/LightGBM · PyTorch-LSTM model zoo compared by skill-vs-baseline | ✅ |
 | S10 | **Warehouse-backed feature pipeline** — `warehouse build`, DuckDB SQL feature engineering (gridding, rolling window functions, news aggregation) + optional BigQuery loader; `train --source warehouse` | ✅ |
+| S11 | **MLOps loop** — MLflow tracking + model registry (`train --track`), FastAPI serving (`/api/forecast`, `/monitoring`), GitHub Actions CI + retrain, Evidently drift monitoring (`monitor`) | ✅ |
 
-Phases **S11–S12** (an MLflow/CI/monitoring MLOps loop and a RAG↔forecast stitch)
-are specified in [docs/ML_ROADMAP.md](docs/ML_ROADMAP.md).
+Phase **S12** (a RAG↔forecast stitch — inject the current regime into cited `ask`
+answers) is specified in [docs/ML_ROADMAP.md](docs/ML_ROADMAP.md).
 
-**141 tests** — 139 pass fully offline; 2 skipped (a live-DB test + one env-gated).
+**159 tests** — 158 pass fully offline; 1 skipped (a live-DB test gated on an env var).
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the design spec and architecture
 diagram, [docs/ML_ROADMAP.md](docs/ML_ROADMAP.md) for the ML expansion (S9–S12), and
 the [As-built notes](#as-built-notes) below for intentional deviations.
@@ -106,6 +108,12 @@ crypto-intel predict --asset ETH  # → next-window realized vol + risk regime
 #    (needs the warehouse extra: pip install -e ".[warehouse]")
 crypto-intel warehouse build --asset ETH
 crypto-intel train --asset ETH --source warehouse
+
+# 9) (Optional) MLOps: track training in MLflow + register, then monitor drift
+#    (needs: pip install -e ".[mlops,monitor]")
+crypto-intel train   --asset ETH --track      # logs run + registers crypto-intel-vol-ETH
+crypto-intel monitor --asset ETH              # Evidently drift report → /monitoring
+crypto-intel serve                            # GET /api/forecast?asset=ETH  ·  /monitoring
 ```
 
 > **Volatility, not price.** `train`/`predict` forecast next-window *realized
@@ -161,8 +169,9 @@ answers (fraction of answer sentences carrying a `[n]` marker).
 | `eval` | Score retrieval (+ optional citation coverage) over `data/eval_cases.json` | `--cases`, `--synth`, `--k`, `-v` |
 | `prune` | Delete stored content older than a rolling retention window | `--keep-days` (default 7), `-v` |
 | `ask-db` | Retrieve evidence from the **pgvector DB** (DB-backed `ask --no-synth`) | `--asset`, `--hours`, `--k`, `--sources`, `-v` |
-| `train` | Train + compare volatility-forecast models; persist the best | `--asset`, `--models`, `--history-days`, `--lookback`, `--horizon`, `--stride`, `--offline`, `--news`, `-v` |
+| `train` | Train + compare volatility-forecast models; persist the best | `--asset`, `--models`, `--source coingecko\|warehouse\|offline`, `--offline`, `--news`, `--track`, `-v` |
 | `predict` | Forecast next-window realized vol + risk regime | `--asset`, `--model`, `--offline`, `-v` |
+| `monitor` | Evidently feature-drift report vs. the training reference | `--asset`, `--model`, `--history-days`, `--offline`, `-v` |
 | `warehouse build` | Land prices + doc metadata in DuckDB; engineer features in SQL | `--asset`, `--history-days`, `--offline`, `--dest duckdb\|bigquery`, `--rolling-hours`, `-v` |
 | `warehouse stats` | Warehouse row counts + coverage window | `--asset` |
 

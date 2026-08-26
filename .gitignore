@@ -12,6 +12,12 @@ data/warehouse.duckdb
 *.duckdb
 *.duckdb.wal
 
+# MLOps artifacts (S11): MLflow store/DB/artifacts + Evidently drift reports
+mlruns/
+mlartifacts/
+data/mlflow.db
+data/monitoring/
+
 # Python
 __pycache__/
 *.py[cod]

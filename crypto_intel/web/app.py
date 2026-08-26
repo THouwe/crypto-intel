@@ -171,3 +171,47 @@ def api_evidence(
             "notes": ctx.notes,
         }
     )
+
+
+@app.get("/api/forecast")
+def api_forecast(
+    asset: str = Query(DEFAULT_ASSET, min_length=1, max_length=16),
+    model: str = Query(None, max_length=32),
+    client: CoinGeckoClient = Depends(get_price_client),
+) -> JSONResponse:
+    """Serve a next-window volatility / risk-regime forecast (phase S11).
+
+    Loads the trained model bundle for ``asset`` and returns a ``VolForecast``
+    (volatility + regime, never a price/trade call). 404 if no model is trained,
+    503 if the forecast extras are not installed on the server.
+    """
+    settings = get_settings()
+    try:
+        from ..forecast.predict import predict as run_predict
+    except ImportError:
+        raise HTTPException(status_code=503, detail="Forecast dependencies not installed on server.")
+
+    try:
+        fc = run_predict(asset, model=model, settings=settings, client=client)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except Exception as exc:  # network / unexpected upstream failure
+        logger.warning("forecast failed for %s: %s", asset, exc)
+        raise HTTPException(status_code=502, detail="Forecast unavailable.")
+
+    return JSONResponse(fc.model_dump(mode="json"))
+
+
+@app.get("/monitoring", include_in_schema=False)
+def monitoring(asset: str = Query(DEFAULT_ASSET, min_length=1, max_length=16)) -> FileResponse:
+    """Serve the Evidently drift report HTML for ``asset`` (phase S11)."""
+    settings = get_settings()
+    path = settings.resolve_path(settings.monitoring_path) / f"{asset.upper()}.html"
+    if not path.exists():
+        raise HTTPException(
+            status_code=404,
+            detail=f"No drift report for {asset.upper()}. Run: crypto-intel monitor --asset {asset.upper()}",
+        )
+    return FileResponse(path)

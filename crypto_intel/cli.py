@@ -464,6 +464,9 @@ def train(
     news: bool = typer.Option(
         False, "--news", help="Add exogenous news features from the document store."
     ),
+    track: bool = typer.Option(
+        False, "--track", help="Log the run to MLflow + register the best model (phase S11)."
+    ),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Verbose logging."),
 ) -> None:
     """Train + compare volatility-forecast models; persist the best (phase S9)."""
@@ -528,6 +531,23 @@ def train(
         raise typer.Exit(code=1)
 
     _print_train_report(report, settings)
+
+    if track:
+        if "bundle_dir" not in report:
+            typer.echo("Nothing persisted to track.")
+        else:
+            from .mlops.tracking import track_training
+            info = track_training(report, report["bundle_dir"], settings)
+            if info is None:
+                typer.echo("MLflow tracking unavailable. Install:  pip install -e .[mlops]")
+            else:
+                typer.echo("")
+                typer.echo(f"MLflow run   : {info['run_id']}  (exp: {info['experiment']})")
+                typer.echo(f"Tracking URI : {info['tracking_uri']}")
+                if info["registered"]:
+                    typer.echo(f"Registered   : {info['model_name']}")
+                else:
+                    typer.echo("Registered   : (skipped — non-tabular best model)")
 
 
 def _print_train_report(report: dict, settings) -> None:
@@ -596,6 +616,76 @@ def predict(
     typer.echo("")
     for note in fc.notes:
         typer.echo(note)
+
+
+@app.command()
+def monitor(
+    asset: str = typer.Option(..., "--asset", help="Ticker, e.g. ETH."),
+    model: str = typer.Option(None, "--model", help="Pick a model if several are trained."),
+    history_days: int = typer.Option(None, "--history-days", help="Days of recent data to score."),
+    offline: str = typer.Option(None, "--offline", help="Score drift against a timestamp,price CSV."),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Verbose logging."),
+) -> None:
+    """Build an Evidently feature-drift report vs. the training reference (S11)."""
+    _configure_logging(verbose)
+    _require_forecast()
+    settings = get_settings()
+
+    from pathlib import Path
+    from .forecast.predict import bundle_dir_for
+    from .forecast.models import load_bundle
+    from .forecast.dataset import load_series_csv, fetch_price_history
+    from .mlops.monitor import load_reference, compute_current_features, build_drift_report
+
+    try:
+        bundle = bundle_dir_for(asset, model, settings)
+        ref_X, ref_names = load_reference(bundle)
+    except (FileNotFoundError, ValueError) as exc:
+        typer.echo(f"Could not load model/reference: {exc}")
+        raise typer.Exit(code=1)
+    _, meta = load_bundle(bundle)
+
+    if offline:
+        series = load_series_csv(Path(offline))
+    else:
+        from .prices import PriceError
+        days = history_days or settings.forecast_history_days
+        typer.echo(f"Fetching {days}d of recent {asset.upper()} data from CoinGecko ...")
+        try:
+            series = fetch_price_history(asset, days, settings)
+        except PriceError as exc:
+            typer.echo(f"Could not fetch price history: {exc}")
+            raise typer.Exit(code=1)
+
+    cur_X, cur_names = compute_current_features(series, meta)
+
+    # Align on the columns both matrices share (reference may carry news features).
+    common = [n for n in ref_names if n in cur_names]
+    ref_idx = [ref_names.index(n) for n in common]
+    cur_idx = [cur_names.index(n) for n in common]
+    ref_al = ref_X[:, ref_idx]
+    cur_al = cur_X[:, cur_idx]
+    if cur_al.shape[0] < 2:
+        typer.echo("Not enough recent windows to assess drift; widen --history-days.")
+        raise typer.Exit(code=1)
+
+    out_html = settings.resolve_path(settings.monitoring_path) / f"{asset.upper()}.html"
+    try:
+        summary = build_drift_report(ref_al, cur_al, common, out_html)
+    except ImportError as exc:
+        typer.echo(str(exc))
+        raise typer.Exit(code=1)
+
+    typer.echo(f"Drift report — {asset.upper()}")
+    typer.echo("=" * 44)
+    typer.echo(f"Reference windows : {ref_al.shape[0]}")
+    typer.echo(f"Current windows   : {cur_al.shape[0]}")
+    typer.echo(f"Features compared : {summary['n_features']}")
+    if summary.get("drift_summary"):
+        for k, v in summary["drift_summary"].items():
+            typer.echo(f"  {k}: {v}")
+    typer.echo(f"Report            : {summary['out_html']}")
+    typer.echo("Serve it at /monitoring via:  crypto-intel serve")
 
 
 # --------------------------------------------------------------------------- #

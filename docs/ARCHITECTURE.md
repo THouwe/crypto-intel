@@ -50,7 +50,8 @@ and reproducible.
 - Answer synthesis with the Anthropic Claude API, returning a grounded explanation
   with numbered inline citations.
 - A `typer` CLI: `ingest`, `stats`, `price-event`, `ask`, `eval`, `prune`, `ask-db`,
-  the S9 forecasting commands `train` / `predict`, and the S10 `warehouse` group.
+  the S9 forecasting commands `train` / `predict`, the S10 `warehouse` group, and
+  the S11 `monitor` command (+ `train --track`).
 - An optional **FastAPI web GUI** over `price-event` + evidence retrieval (no
   synthesis — see [GUI.md](GUI.md)).
 - A `pytest` suite (with fixtures + a synthetic price series) so the core logic
@@ -216,7 +217,7 @@ SOL:  {coingecko_id: solana,   aliases: [sol, solana]}
 
 - `crypto_intel/cli.py` — `typer` app; wires subcommands (`ingest`, `stats`,
   `price-event`, `ask`, `eval`, `prune`, `ask-db`, `serve`, `train`, `predict`,
-  `warehouse`) to `pipeline.py`, `forecast/`, and `warehouse/`.
+  `warehouse`, `monitor`) to `pipeline.py`, `forecast/`, `warehouse/`, and `mlops/`.
 - `crypto_intel/config.py` — `pydantic-settings` object: API keys, paths, model
   name, embedding/store backend, defaults (lookback, k). Loads `.env`.
 - `crypto_intel/models.py` — the pydantic models above; `SourceType` enum.
@@ -259,7 +260,13 @@ SOL:  {coingecko_id: solana,   aliases: [sol, solana]}
   (`DuckWarehouse` — load prices/docs, SQL gridding + rolling-feature and news
   aggregation, reads consumed by `train --source warehouse`) and `bq.py` (optional
   BigQuery loader). Wired to `warehouse build` / `warehouse stats` in `cli.py`.
-- `crypto_intel/web/app.py` — FastAPI app for the optional GUI (see [GUI.md](GUI.md)).
+- `crypto_intel/mlops/` — the S11 MLOps loop (optional extras): `tracking.py`
+  (MLflow run logging + `pyfunc` model registry, wired to `train --track`) and
+  `monitor.py` (bundle reference snapshot + Evidently drift report, wired to
+  `monitor`). Serving lives in `web/app.py` (`/api/forecast`, `/monitoring`); CI in
+  `.github/workflows/`.
+- `crypto_intel/web/app.py` — FastAPI app for the optional GUI + S11 serving
+  (`/api/forecast`, `/monitoring`) (see [GUI.md](GUI.md)).
 - `crypto_intel/data/feeds.yaml`, `assets.yaml` — configuration (feed list +
   ticker/CoinGecko-id map).
 
@@ -271,6 +278,7 @@ crypto-intel/
 ├── README.md
 ├── .env.example
 ├── Dockerfile · Procfile · nixpacks.toml · netlify.toml   # deployment
+├── .github/workflows/                # S11: ci.yml (lint+test matrix) · train.yml (retrain)
 ├── crypto_intel/
 │   ├── cli.py · config.py · models.py
 │   ├── normalize.py · chunking.py · embeddings.py
@@ -280,6 +288,8 @@ crypto-intel/
 │   │   ├── features.py · models.py · dataset.py · train.py · predict.py
 │   ├── warehouse/                    # S10: DuckDB/BigQuery SQL feature pipeline (optional)
 │   │   ├── duck.py · bq.py
+│   ├── mlops/                        # S11: MLflow tracking/registry + Evidently monitoring (optional)
+│   │   ├── tracking.py · monitor.py
 │   ├── ingest/
 │   │   ├── base.py · registry.py · rss.py · reddit.py · coinmarketcap.py
 │   ├── web/
@@ -313,9 +323,10 @@ The project was built in self-contained increments. All are complete.
 | **S8** | `eval` scorecard — retrieval hit-rate + citation coverage over a committed case set. |
 | **S9** | **Volatility / risk-regime forecasting** (`train` / `predict`): a `forecast/` subsystem — feature engineering, a model zoo (persistence baseline · scikit-learn · XGBoost/LightGBM · PyTorch LSTM) compared on a temporal split by skill-vs-baseline, and model-bundle persistence. Volatility only — never a price/trade call. See [ML_ROADMAP.md](ML_ROADMAP.md). |
 | **S10** | **Warehouse-backed feature pipeline** (`warehouse build` / `stats`): a `warehouse/` subsystem landing prices + doc metadata in **DuckDB** with SQL feature engineering (hourly gridding, rolling window functions, news aggregation); `train --source warehouse` consumes the SQL output. Optional **BigQuery** free-tier loader (`[bq]` extra). See [ML_ROADMAP.md](ML_ROADMAP.md). |
+| **S11** | **MLOps loop**: MLflow experiment tracking + model registry (`train --track`, SQLite backend), FastAPI serving (`/api/forecast`, `/monitoring`), GitHub Actions CI + retrain workflows, and Evidently drift monitoring (`monitor`). See [ML_ROADMAP.md](ML_ROADMAP.md). |
 
-Phases **S11–S12** (an MLflow/CI/monitoring MLOps loop and a RAG↔forecast stitch)
-are specified in [ML_ROADMAP.md](ML_ROADMAP.md) and not yet built.
+Phase **S12** (a RAG↔forecast stitch) is specified in [ML_ROADMAP.md](ML_ROADMAP.md)
+and not yet built.
 
 Beyond the original roadmap, the project also gained: a pluggable **pgvector**
 store backend, `ask-db`, rolling-window **retention** (`prune` / `pg_cron`), a

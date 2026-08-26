@@ -63,6 +63,15 @@ warehouse = [
 bq = [
     "google-cloud-bigquery>=3.0",
 ]
+# MLflow experiment tracking + model registry (phase S11).
+mlops = [
+    "mlflow>=2.9",
+]
+# Evidently drift monitoring (phase S11).
+monitor = [
+    "evidently>=0.7",
+    "pandas>=2.0",
+]
 dev = [
     "pytest>=8.0",
 ]

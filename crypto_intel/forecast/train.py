@@ -196,6 +196,9 @@ def train_models(
             },
         }
         save_bundle(fitted[best], meta, bundle_dir)
+        # Snapshot the training feature distribution as the drift reference (S11).
+        from ..mlops.monitor import save_reference
+        save_reference(bundle_dir, X[tr], feature_names)
         report["bundle_dir"] = str(bundle_dir)
 
     return report

@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    name: lint + test (py${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install (core + dev + forecast + gbm + warehouse)
+        # Torch-free on purpose: the LSTM (dl) and MLflow/Evidently (mlops/monitor)
+        # paths are guarded with importorskip and skip cleanly here.
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev,forecast,gbm,warehouse]"
+
+      - name: Lint (ruff — real errors only, non-blocking style)
+        run: |
+          pip install ruff
+          ruff check --select E9,F63,F7,F82 crypto_intel tests
+
+      - name: Test
+        run: pytest -q

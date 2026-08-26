@@ -19,9 +19,10 @@ What makes it more than "chat over documents":
 
 ---
 
-## Status: complete (S1–S8)
+## Status: complete (S1–S9)
 
-The full pipeline runs end-to-end: `ingest → stats → price-event → ask`.
+The RAG pipeline runs end-to-end (`ingest → stats → price-event → ask`); S9 adds a
+volatility-forecasting subsystem (`train → predict`).
 
 | Phase | What it delivers | State |
 |---|---|---|
@@ -33,11 +34,15 @@ The full pipeline runs end-to-end: `ingest → stats → price-event → ask`.
 | S6 | Grounded synthesis with inline `[n]` citations, full `ask` | ✅ |
 | S7 | CMC connector, rounded-out test suite, `--all` runs every connector, clean-clone docs | ✅ |
 | S8 | `eval` scorecard — retrieval hit-rate + citation coverage over a committed case set | ✅ |
+| S9 | **Volatility / risk-regime forecasting** — `train`/`predict`, a baseline · scikit-learn · XGBoost/LightGBM · PyTorch-LSTM model zoo compared by skill-vs-baseline | ✅ |
 
-**116 tests** — 115 pass fully offline; 1 skipped (a live-DB test gated on an env
-var). See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the design spec and
-architecture diagram, and the [As-built notes](#as-built-notes) below for where the
-implementation intentionally deviates from it.
+Phases **S10–S12** (warehouse-backed features, an MLflow/CI/monitoring MLOps loop,
+and a RAG↔forecast stitch) are specified in [docs/ML_ROADMAP.md](docs/ML_ROADMAP.md).
+
+**133 tests** — 131 pass fully offline; 2 skipped (a live-DB test + one env-gated).
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the design spec and architecture
+diagram, [docs/ML_ROADMAP.md](docs/ML_ROADMAP.md) for the ML expansion (S9–S12), and
+the [As-built notes](#as-built-notes) below for intentional deviations.
 
 ## Documentation
 
@@ -89,7 +94,18 @@ crypto-intel ask "Why did ETH drop 6% today?"
 # 6) Eval — a quality-signal scorecard over data/eval_cases.json (no key needed)
 crypto-intel eval                 # retrieval metrics only
 crypto-intel eval --synth         # adds citation coverage (needs ANTHROPIC_API_KEY)
+
+# 7) Forecast — train + compare volatility models, then predict the next window
+#    (needs the forecast extras: pip install -e ".[forecast,gbm,dl]")
+crypto-intel train   --asset ETH --models baseline,sklearn,xgboost,lstm
+crypto-intel predict --asset ETH  # → next-window realized vol + risk regime
 ```
+
+> **Volatility, not price.** `train`/`predict` forecast next-window *realized
+> volatility* and a *risk regime* (calm / normal / turbulent) — never price
+> direction or a trade call. Every forecast carries a "not investment advice" line.
+> See [docs/ML_ROADMAP.md](docs/ML_ROADMAP.md). Use `--offline series.csv` for a
+> reproducible, network-free run.
 
 The first `ingest`/`ask` downloads the ~80 MB ONNX embedding model once (cached in
 `~/.cache/chroma/`). `crypto-intel --help` lists every command.
@@ -138,6 +154,8 @@ answers (fraction of answer sentences carrying a `[n]` marker).
 | `eval` | Score retrieval (+ optional citation coverage) over `data/eval_cases.json` | `--cases`, `--synth`, `--k`, `-v` |
 | `prune` | Delete stored content older than a rolling retention window | `--keep-days` (default 7), `-v` |
 | `ask-db` | Retrieve evidence from the **pgvector DB** (DB-backed `ask --no-synth`) | `--asset`, `--hours`, `--k`, `--sources`, `-v` |
+| `train` | Train + compare volatility-forecast models; persist the best | `--asset`, `--models`, `--history-days`, `--lookback`, `--horizon`, `--stride`, `--offline`, `--news`, `-v` |
+| `predict` | Forecast next-window realized vol + risk regime | `--asset`, `--model`, `--offline`, `-v` |
 
 Notes:
 - `--sources` accepts a comma-separated subset; `--all` runs every configured

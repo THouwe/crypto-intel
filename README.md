@@ -19,10 +19,11 @@ What makes it more than "chat over documents":
 
 ---
 
-## Status: complete (S1–S9)
+## Status: complete (S1–S10)
 
 The RAG pipeline runs end-to-end (`ingest → stats → price-event → ask`); S9 adds a
-volatility-forecasting subsystem (`train → predict`).
+volatility-forecasting subsystem (`train → predict`) and S10 a warehouse-backed
+SQL feature pipeline (`warehouse build → train --source warehouse`).
 
 | Phase | What it delivers | State |
 |---|---|---|
@@ -35,11 +36,12 @@ volatility-forecasting subsystem (`train → predict`).
 | S7 | CMC connector, rounded-out test suite, `--all` runs every connector, clean-clone docs | ✅ |
 | S8 | `eval` scorecard — retrieval hit-rate + citation coverage over a committed case set | ✅ |
 | S9 | **Volatility / risk-regime forecasting** — `train`/`predict`, a baseline · scikit-learn · XGBoost/LightGBM · PyTorch-LSTM model zoo compared by skill-vs-baseline | ✅ |
+| S10 | **Warehouse-backed feature pipeline** — `warehouse build`, DuckDB SQL feature engineering (gridding, rolling window functions, news aggregation) + optional BigQuery loader; `train --source warehouse` | ✅ |
 
-Phases **S10–S12** (warehouse-backed features, an MLflow/CI/monitoring MLOps loop,
-and a RAG↔forecast stitch) are specified in [docs/ML_ROADMAP.md](docs/ML_ROADMAP.md).
+Phases **S11–S12** (an MLflow/CI/monitoring MLOps loop and a RAG↔forecast stitch)
+are specified in [docs/ML_ROADMAP.md](docs/ML_ROADMAP.md).
 
-**133 tests** — 131 pass fully offline; 2 skipped (a live-DB test + one env-gated).
+**141 tests** — 139 pass fully offline; 2 skipped (a live-DB test + one env-gated).
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the design spec and architecture
 diagram, [docs/ML_ROADMAP.md](docs/ML_ROADMAP.md) for the ML expansion (S9–S12), and
 the [As-built notes](#as-built-notes) below for intentional deviations.
@@ -99,6 +101,11 @@ crypto-intel eval --synth         # adds citation coverage (needs ANTHROPIC_API_
 #    (needs the forecast extras: pip install -e ".[forecast,gbm,dl]")
 crypto-intel train   --asset ETH --models baseline,sklearn,xgboost,lstm
 crypto-intel predict --asset ETH  # → next-window realized vol + risk regime
+
+# 8) (Optional) Land data in a DuckDB warehouse and train from SQL-built features
+#    (needs the warehouse extra: pip install -e ".[warehouse]")
+crypto-intel warehouse build --asset ETH
+crypto-intel train --asset ETH --source warehouse
 ```
 
 > **Volatility, not price.** `train`/`predict` forecast next-window *realized
@@ -156,6 +163,8 @@ answers (fraction of answer sentences carrying a `[n]` marker).
 | `ask-db` | Retrieve evidence from the **pgvector DB** (DB-backed `ask --no-synth`) | `--asset`, `--hours`, `--k`, `--sources`, `-v` |
 | `train` | Train + compare volatility-forecast models; persist the best | `--asset`, `--models`, `--history-days`, `--lookback`, `--horizon`, `--stride`, `--offline`, `--news`, `-v` |
 | `predict` | Forecast next-window realized vol + risk regime | `--asset`, `--model`, `--offline`, `-v` |
+| `warehouse build` | Land prices + doc metadata in DuckDB; engineer features in SQL | `--asset`, `--history-days`, `--offline`, `--dest duckdb\|bigquery`, `--rolling-hours`, `-v` |
+| `warehouse stats` | Warehouse row counts + coverage window | `--asset` |
 
 Notes:
 - `--sources` accepts a comma-separated subset; `--all` runs every configured

@@ -246,6 +246,8 @@ details, and [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for the hosted stack.
 
 ## Deployment (optional)
 
+**Web GUI deployed at [whathappenedcrypto](https://whathappenedcrypto.netlify.app/)**.
+
 The CLI runs entirely locally on embedded Chroma — no deployment needed. A hosted
 **web** deployment is also supported, split across three services:
 
@@ -266,6 +268,10 @@ Deployment files: [`netlify.toml`](netlify.toml), [`Procfile`](Procfile),
 [`nixpacks.toml`](nixpacks.toml), [`Dockerfile`](Dockerfile), and
 [`deploy/`](deploy/) (`schema.sql`, `retention.sql`, `start.sh`).
 **Full step-by-step in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).**
+
+![netlify frontend example 01](img/web-01.png)
+
+![netlify frontend example 02](img/web-02.png)
 
 ## Embedding backend
 
@@ -336,6 +342,16 @@ Module map: `cli.py` (Typer app) · `config.py` (pydantic-settings) · `models.p
 `detect_event`) · `retrieve.py` (parsing + BM25) · `synthesize.py` (Claude +
 citations) · `pipeline.py` (`ingest_all`, `retrieve_context`, `ask`). Full
 responsibilities and the data model are in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
+## seeding the DB from local machine (Windows commands)
+
+```
+.\.venv\Scripts\Activate.ps1
+$env:STORE_BACKEND = "pgvector"
+$env:DATABASE_URL = "postgresql://.../postgres"
+crypto-intel ingest --sources news,exchange,regulator --lookback-hours 168
+.\.venv\Scripts\crypto-intel.exe stats            #verify
+```
 
 ## As-built notes
 

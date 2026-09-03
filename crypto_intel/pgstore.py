@@ -188,6 +188,21 @@ class PgVectorStore:
             cur.execute("DELETE FROM chunks WHERE published_at < %s", (older_than,))
             return cur.rowcount
 
+    def existing_doc_ids(self, doc_ids) -> set[str]:
+        """Return which of ``doc_ids`` already have chunks in the store.
+
+        Ingest dedups against this (the vector store is the source of truth), so
+        a document whose chunks were pruned by retention is treated as new and
+        re-embedded on the next run. See :func:`crypto_intel.pipeline.ingest_all`.
+        """
+        ids = list({d for d in doc_ids if d})
+        if not ids:
+            return set()
+        self._ensure_schema()
+        with self._connect(register=False) as conn, conn.cursor() as cur:
+            cur.execute("SELECT DISTINCT doc_id FROM chunks WHERE doc_id = ANY(%s)", (ids,))
+            return {row[0] for row in cur.fetchall()}
+
     # -- read ------------------------------------------------------------------
 
     def query(

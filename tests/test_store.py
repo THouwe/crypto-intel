@@ -159,6 +159,55 @@ def test_reingest_does_not_duplicate_chunks(tmp_settings):
     assert VectorStore(tmp_settings).count() == count_after_first
 
 
+def test_reingest_after_prune_repopulates_store(tmp_settings):
+    """Regression: retention deletes chunks; the next ingest must add them back.
+
+    The vector store — not the JSONL archive — is the dedup authority, so a doc
+    whose chunks were pruned is treated as new again and re-embedded, even though
+    it is still recorded in the JSONL archive (as happens under DB-native
+    ``pg_cron`` retention, which prunes the store but not the archive).
+    """
+    old_ts = datetime(2026, 6, 1, 12, 0, tzinfo=timezone.utc)
+    long_text = " ".join(["Ethereum dropped on ETF outflows"] * 80)
+    conn = _FixedConnector([_item("https://x/1", old_ts, text=long_text)])
+    emb = DeterministicEmbedder()
+
+    first = ingest_all(connectors=[conn], settings=tmp_settings, embedder=emb)
+    store = VectorStore(tmp_settings)
+    assert first.chunks_added > 0
+    assert store.count() == first.chunks_added
+
+    # Simulate rolling-window retention deleting the aged chunks from the store,
+    # leaving the JSONL archive untouched.
+    removed = store.prune(datetime(2026, 7, 1, tzinfo=timezone.utc))
+    assert removed == first.chunks_added
+    assert VectorStore(tmp_settings).count() == 0
+
+    # Re-ingest identical content: the store is empty, so the doc is re-embedded.
+    second = ingest_all(connectors=[conn], settings=tmp_settings, embedder=emb)
+    assert second.added == 1
+    assert second.chunks_added == first.chunks_added
+    assert VectorStore(tmp_settings).count() == first.chunks_added
+
+
+def test_existing_doc_ids_reports_only_stored_docs(tmp_settings):
+    from crypto_intel.pipeline import load_existing_ids
+
+    ts = datetime(2026, 7, 20, 12, 0, tzinfo=timezone.utc)
+    long_text = " ".join(["Ethereum dropped on ETF outflows"] * 80)
+    conn = _FixedConnector([_item("https://x/1", ts, text=long_text)])
+    ingest_all(connectors=[conn], settings=tmp_settings, embedder=DeterministicEmbedder())
+
+    stored = load_existing_ids(tmp_settings.documents_file)  # the one doc's id
+    assert len(stored) == 1
+
+    store = VectorStore(tmp_settings)
+    present = store.existing_doc_ids(list(stored) + ["missing-doc-id"])
+    assert present == stored
+    # Empty input is a cheap no-op.
+    assert store.existing_doc_ids([]) == set()
+
+
 class _FixedConnector:
     name = "fixed"
     source_type = SourceType.news

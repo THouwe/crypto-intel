@@ -2,6 +2,10 @@
 -- pg_cron. This is the DB-native alternative to running `crypto-intel prune`
 -- from the app/cron. Use one or the other, not both.
 --
+-- Safe with the recurring ingest: ingest de-duplicates against the `chunks`
+-- table (not the JSONL archive), so documents deleted here are re-embedded on
+-- the next ingest run and the store re-populates. See docs/DEPLOYMENT.md §5.
+--
 -- Target: Supabase (pg_cron is available; enable it in Dashboard → Database →
 -- Extensions, or with the CREATE EXTENSION below). Keeps only the last 7 days.
 

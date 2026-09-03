@@ -161,7 +161,31 @@ Keep only the recent window (matches the 168h initial populate). Use **one** of:
 - **DB-native:** schedule [`deploy/retention.sql`](../deploy/retention.sql) with
   `pg_cron` on Supabase (hourly `DELETE`).
 
-Don't run both.
+Don't run both (two schedules racing to delete the same rows is pointless).
+
+### How retention and re-population interact (important)
+
+The recurring ingest **de-duplicates against the vector store, not the JSONL
+archive** ([`ingest_all`](../crypto_intel/pipeline.py) → `store.existing_doc_ids`).
+A fetched document is re-embedded whenever its chunks are **not** already in the
+store. That's what makes retention self-healing: once a rolling window deletes a
+document's chunks, the next ingest re-fetches the same feed item and inserts it
+again, so the DB stays populated.
+
+> **Why this matters.** Feeds keep returning the same items across runs. If dedup
+> were keyed on the JSONL archive (which DB-native `pg_cron` retention never
+> prunes), every re-fetched item would be skipped as "already seen" and the DB
+> would drain to empty and **never re-populate** after the first retention pass.
+> Deduping against the store instead of the archive is the fix.
+
+Because dedup no longer depends on it, the JSONL archive (`data/store/documents.jsonl`)
+and the vector store are **allowed to diverge**, and under DB-native retention the
+archive is not pruned, so it grows over time. It is only used as an ingest-side
+document log (and by the forecast subsystem); it is **not** on the query path.
+If you want to cap it, either use the app-level pruner (`crypto-intel prune`
+trims both) on its own schedule, or don't persist it at all on the cron box —
+the ingest cron works correctly even with an ephemeral or absent archive, since
+the store is the source of truth.
 
 ## All-in-one alternative (no Netlify)
 

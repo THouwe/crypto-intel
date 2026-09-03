@@ -17,6 +17,7 @@ of them return hits in the same ``{id, text, metadata, distance}`` shape so
 from __future__ import annotations
 
 from collections import Counter
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol, runtime_checkable
@@ -82,6 +83,9 @@ class Store(Protocol):
         ...
 
     def prune(self, older_than: datetime) -> int:
+        ...
+
+    def existing_doc_ids(self, doc_ids: Iterable[str]) -> set[str]:
         ...
 
     def count(self) -> int:
@@ -201,6 +205,23 @@ class VectorStore:
         if ids:
             self.collection.delete(ids=ids)
         return len(ids)
+
+    def existing_doc_ids(self, doc_ids: Iterable[str]) -> set[str]:
+        """Return which of ``doc_ids`` already have chunks in the store.
+
+        Ingest dedups against this (the vector store is the source of truth), so
+        a document whose chunks were pruned by retention is treated as new and
+        re-embedded on the next run. See :func:`crypto_intel.pipeline.ingest_all`.
+        """
+        ids = list({d for d in doc_ids if d})
+        if not ids or self.count() == 0:
+            return set()
+        got = self.collection.get(where={"doc_id": {"$in": ids}}, include=["metadatas"])
+        return {
+            str(md["doc_id"])
+            for md in (got.get("metadatas") or [])
+            if md and md.get("doc_id") is not None
+        }
 
     def count(self) -> int:
         """Total number of chunks stored."""

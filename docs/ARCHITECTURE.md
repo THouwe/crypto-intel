@@ -140,7 +140,11 @@ Python-first. Versions are known-good minimums; exact versions are pinned in
 Orchestration entrypoints in `pipeline.py`:
 
 - `ingest_all(...)` — runs the selected connectors, normalizes, chunks, embeds,
-  upserts (`--if-empty` skips if the store is already populated).
+  upserts (`--if-empty` skips if the store is already populated). De-duplication
+  is keyed on the **vector store** (`store.existing_doc_ids`), not the JSONL
+  archive, so documents whose chunks were removed by retention are re-embedded on
+  the next run — the store re-populates itself. The JSONL archive is appended in
+  lockstep (deduped against its own ids) and may validly diverge from the store.
 - `retrieve_context(...)` — detects the price event (optional), retrieves the
   time-windowed context; the shared retrieval path.
 - `ask(...)` — `retrieve_context` + synthesis into a cited `Answer`.

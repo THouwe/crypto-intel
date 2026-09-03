@@ -1,8 +1,8 @@
 """Pipeline orchestration.
 
-S2 provides :func:`ingest_all` (fetch -> normalize -> dedup -> persist to JSONL)
-plus the small JSONL document-store helpers it needs. `ask(...)` arrives in
-later phases.
+S2 provides :func:`ingest_all` (fetch -> normalize -> dedup against the vector
+store -> embed/upsert -> archive to JSONL) plus the small JSONL document-store
+helpers it needs. `ask(...)` arrives in later phases.
 """
 
 from __future__ import annotations
@@ -153,9 +153,22 @@ def ingest_all(
 
     ``connectors``/``embedder``/``store`` can be injected for testing; otherwise
     they're built from config. Never raises for a single bad connector —
-    failures are counted and logged (fail soft). New documents are appended to
-    the JSONL store, then chunked, embedded, and upserted into the vector store.
-    Chunk ids are deterministic, so the upsert is idempotent (no duplicate chunks).
+    failures are counted and logged (fail soft). New documents are chunked,
+    embedded, and upserted into the vector store, then appended to the JSONL
+    archive. Chunk ids are deterministic, so the upsert is idempotent (no
+    duplicate chunks).
+
+    **Deduplication is keyed on the vector store, not the JSONL archive.** A
+    fetched document is (re-)embedded whenever its chunks are *not* already in
+    the store. This is what lets retention re-populate the DB: after a rolling
+    window deletes old chunks (``deploy/retention.sql`` or ``prune_all``), the
+    same feed items are re-ingested cleanly instead of being skipped as
+    "already seen". The JSONL archive can validly diverge from the store (e.g.
+    DB-native ``pg_cron`` retention prunes the store but not the JSONL), so it is
+    NOT used to gate embedding — it is deduped only against its own ids when
+    appending, to keep the archive free of duplicate lines. When ``embed`` is
+    False (no store write), dedup falls back to the JSONL archive so that path
+    stays idempotent.
 
     ``skip_if_populated=True`` makes this a no-op when the store already has
     chunks — used for the one-time initial populate on deploy (so restarts don't
@@ -164,8 +177,14 @@ def ingest_all(
     settings = settings or get_settings()
     lookback_hours = lookback_hours or settings.default_lookback_hours
 
+    # The vector store is the dedup authority; build it once and reuse it for the
+    # populated check, the existence lookup, and the upsert.
+    if embed and store is None:
+        store = get_store(settings)
+
     if skip_if_populated:
-        existing = (store or get_store(settings)).count()
+        populated_store = store if store is not None else get_store(settings)
+        existing = populated_store.count()
         if existing > 0:
             logger.info("Store already has %d chunk(s); skipping initial ingest.", existing)
             return IngestResult(skipped=True)
@@ -175,11 +194,12 @@ def ingest_all(
         connectors = build_connectors(sources, settings)
 
     doc_path = settings.documents_file
-    seen = load_existing_ids(doc_path)
     result = IngestResult(connectors=len(connectors))
     per_source: Counter[str] = Counter()
-    new_docs: list[Document] = []
 
+    # First pass: fetch + normalize, deduping within this batch only.
+    candidates: list[Document] = []
+    seen_batch: set[str] = set()
     for connector in connectors:
         try:
             items = list(connector.fetch(lookback_hours))
@@ -191,12 +211,23 @@ def ingest_all(
         for item in items:
             result.fetched += 1
             doc = normalize(item, assets_cfg)
-            if doc.id in seen:
+            if doc.id in seen_batch:
                 result.duplicates += 1
                 continue
-            seen.add(doc.id)
-            new_docs.append(doc)
-            per_source[doc.source.value] += 1
+            seen_batch.add(doc.id)
+            candidates.append(doc)
+
+    # Second pass: drop candidates whose chunks the store already holds. When
+    # embedding, ask the store (the source of truth); otherwise fall back to the
+    # JSONL archive so the non-embedding path remains idempotent.
+    if embed:
+        already = store.existing_doc_ids([d.id for d in candidates]) if candidates else set()
+    else:
+        already = load_existing_ids(doc_path)
+    new_docs = [d for d in candidates if d.id not in already]
+    result.duplicates += len(candidates) - len(new_docs)
+    for doc in new_docs:
+        per_source[doc.source.value] += 1
 
     # Embed + upsert BEFORE persisting to JSONL. If embedding fails (e.g. the
     # backend isn't installed), nothing is committed, so a retry reprocesses the
@@ -206,7 +237,10 @@ def ingest_all(
     if embed and new_docs:
         result.chunks_added = _embed_and_store(new_docs, settings, embedder, store)
 
-    append_documents(doc_path, new_docs)
+    # Append to the JSONL archive, deduped against its own ids so a doc that was
+    # pruned from the store but still recorded here doesn't pile up a second line.
+    archived = load_existing_ids(doc_path)
+    append_documents(doc_path, [d for d in new_docs if d.id not in archived])
     result.added = len(new_docs)
     result.per_source_added = dict(per_source)
 
